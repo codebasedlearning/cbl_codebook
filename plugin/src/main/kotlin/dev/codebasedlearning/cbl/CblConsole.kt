@@ -124,8 +124,8 @@ object CblConsole {
     }
 
     /** Names of the output sections currently present in the Run console. */
-    fun sectionNames(project: Project): Set<String> =
-        outputModel(project)?.sections?.mapTo(mutableSetOf()) { it.name } ?: emptySet()
+    // fun sectionNames(project: Project): Set<String> =
+    //     outputModel(project)?.sections?.mapTo(mutableSetOf()) { it.name } ?: emptySet()
 
     /**
      * Scroll the Run console to the section header, highlight it, show the

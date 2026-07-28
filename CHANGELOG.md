@@ -9,6 +9,11 @@ release checklist in [DEVELOPMENT.md](DEVELOPMENT.md) spells out.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-28
+
+- Minor warnings and errors from Problem report
+- Gradle update
+
 ## [1.0.0] - 2026-07-28
 
 - Kotlin sample added

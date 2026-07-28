@@ -8,10 +8,6 @@ import org.intellij.markdown.html.HtmlGenerator
 import org.intellij.markdown.parser.CancellationToken
 import org.intellij.markdown.parser.MarkdownParser
 
-import org.intellij.markdown.MarkdownElementTypes
-import org.intellij.markdown.ast.ASTNode
-import org.intellij.markdown.flavours.commonmark.CommonMarkFlavourDescriptor
-
 
 /** Shared Markdown -> HTML pipeline for the tool window's TOC titles and
  *  notes pane, including ref/embed expansion. */

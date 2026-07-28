@@ -115,6 +115,6 @@ object CblFolding {
     fun regionCount(editor: Editor, model: CblModel?): Int = regionsOf(editor, model).size
 
     /** How many of them the platform reports as collapsed. */
-    fun collapsedCount(editor: Editor, model: CblModel?): Int =
-        regionsOf(editor, model).count { !it.isExpanded }
+    // fun collapsedCount(editor: Editor, model: CblModel?): Int =
+    //    regionsOf(editor, model).count { !it.isExpanded }
 }

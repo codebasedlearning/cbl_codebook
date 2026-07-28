@@ -92,7 +92,7 @@ class CblFoldingTest : BasePlatformTestCase() {
     /**
      * The central assumption of body-only folding: our range NESTS inside the
      * IDE's own whole-comment range instead of colliding with it. If the platform
-     * refused that, [foreign] would come back null - which is what this test is
+     * refused that, foreign would come back null - which is what this test is
      * here to catch. And a CBL body inside a COLLAPSED foreign region would expand
      * invisibly, so unfold-all has to open the enclosing region too.
      */
