@@ -1,0 +1,62 @@
+<idea-plugin>
+    <id>dev.codebasedlearning.codebook</id>
+    <name>Codebook</name>
+    <vendor email="info@codebasedlearning.dev" url="https://www.codebasedlearning.dev">codebasedlearning</vendor>
+
+    <description><![CDATA[
+        Turns the prose in your comments into a readable book: a clickable topic
+        outline, layered follow-caret notes with Markdown rendering, and
+        Run/Debug buttons - while the comments themselves fold away in the
+        editor, so the code stays readable and the explanation stays available.
+        <br/><br/>
+        A topic is a block comment whose first line is a dash-framed title -
+        <code>---- topic ----</code>, <code>--- child ---</code>,
+        <code>-- detail --</code>, <code>- aside -</code> for the four levels.
+        Markers are ordinary comments: they never break compilation and degrade
+        gracefully in editors that know nothing about them.
+        Supports block references and embeds between annotations
+        (<code>[text](#topic)</code>, <code>![](#topic)</code>), cross-file
+        references into other snippets or a Markdown glossary
+        (<code>dictionary.md#term</code> - headings are the blocks there),
+        output-section linking from source to the Run console, and per-course
+        configuration via <code>cbl.properties</code>. Works in any JetBrains
+        IDE - the parser is PSI-comment based and language-agnostic
+        (C++, Python, Java, Kotlin, ...).
+        <br/><br/>
+        Built for the code-based-learning courses at
+        <a href="https://www.codebasedlearning.dev">codebasedlearning.dev</a>.
+    ]]></description>
+
+    <!-- Keep in step with the newest section of CHANGELOG.md by hand - see the
+         release checklist in DEVELOPMENT.md. Rendering these from the changelog
+         automatically was tried and reverted; the comment in build.gradle.kts
+         has the reason. -->
+    <change-notes><![CDATA[
+        <b>Initial release</b>
+        <ul>
+            <li>Topic outline of a file's dash-framed block comments, with layered notes that follow the caret.</li>
+            <li>Markdown rendering (GitHub-flavoured, tables included), images, and links between topics.</li>
+            <li>Short glossary references: <code>[#term]</code> links and <code>![#term]</code> embeds, resolved along a configurable search path.</li>
+            <li>Editor folding of the note body, leaving the title line visible; fold and unfold act on the topic comments only.</li>
+            <li>Run and Debug from the panel; gutter icons link printed output sections back to their source line.</li>
+            <li>Per-course configuration via cascading <code>cbl.properties</code>.</li>
+        </ul>
+    ]]></change-notes>
+
+    <!-- Works in CLion, PyCharm, IntelliJ IDEA, ... - no language-specific API. -->
+    <depends>com.intellij.modules.platform</depends>
+    <!-- Markdown rendering of the notes: the org.jetbrains:markdown library ships
+         inside this bundled plugin, so we use the IDE's copy instead of packing a
+         second one (Plugin Verifier: "Plugin bundles IDE packages"). Bundled in
+         every IntelliJ-based IDE; Codebook is disabled if a user disables it. -->
+    <depends>org.intellij.plugins.markdown</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Codebook"
+                    anchor="right"
+                    icon="/icons/cblToolWindow.svg"
+                    factoryClass="dev.codebasedlearning.cbl.CblToolWindowFactory"/>
+        <postStartupActivity implementation="dev.codebasedlearning.cbl.CblStartup"/>
+        <notificationGroup id="Codebook" displayType="BALLOON"/>
+    </extensions>
+</idea-plugin>

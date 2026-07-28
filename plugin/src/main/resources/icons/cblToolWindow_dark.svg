@@ -1,0 +1,11 @@
+<!-- Dark variant. The New UI prescribes #CED0D6 for tool window icon content in
+     dark themes; #6C707E in cblToolWindow.svg is its light counterpart. The
+     platform recolours the content to white while a tool window button is
+     active, and only these two values give the expected contrast on both sides
+     of that switch. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 13 13">
+  <polygon points="12.1,6.5 9.3,11.35 3.7,11.35 0.9,6.5 3.7,1.65 9.3,1.65"
+           fill="none" stroke="#CED0D6" stroke-width="1.1" stroke-linejoin="round"/>
+  <path d="M4.6 8.8 L6.1 4.2 M7.2 8.8 L8.7 4.2"
+        stroke="#CED0D6" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+</svg>
