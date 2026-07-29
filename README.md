@@ -1,10 +1,21 @@
 # Codebook
 
+## Overview
+
 A JetBrains IDE plugin (CLion, PyCharm, IntelliJ IDEA, …) for
 [code-based-learning](https://www.codebasedlearning.dev) courses: it turns
 didactic comments in course snippets into a structured side panel — and folds
 them away in the editor, so the code stays readable while the prose stays
 available.
+
+### Comment Collection
+
+![Comments collected](./doc/codebook_explained_1.png)
+
+- Headlines (1) from Python multiline comments (folded and unfolded), listed in (2) -> Overview and Code Navigation
+- Comments content hierarchically collected (3) -> Detail View
+- Breadcrumb (4) -> Detail Level
+- Codebook Control (5) -> Run/Debug, Detail View follows Cursor, Fold- and Unfold all
 
 Course snippets are literate programs: the explanation lives in comments next
 to the code it explains. The plugin renders that structure instead of letting
@@ -13,6 +24,36 @@ it compete with the code for screen space.
 One zip installs in every JetBrains IDE. The plugin uses no language-specific
 API — it reads the comment tokens the IDE already produces, so it works
 wherever the IDE understands the language (C++, Python, Kotlin, …).
+
+### Output Selection
+
+![Comments collected](./doc/codebook_explained_2.png)
+
+- When explaining language and concepts, we demonstrate the effects live. Therefore, 
+some of the output relates to the code currently being investigated. The gutter icon (6) 
+to the left of the function selects the relevant part of the output.
+
+### Answers, background and Details
+
+![Glossary Details](./doc/codebook_explained_3.png)
+
+- Often, there is a need to hide or show additional details. But the code should be 
+kept as small as possible to stay focused, e.g. for questions and answers, further links or 
+background information. Here, we can reference a text block from an additional glossary 
+Markdown file, and the corresponding block can be displayed in the comment on the right (7).
+
+### Graphics
+
+![Graphics](./doc/codebook_explained_4.png)
+
+- Graphics and links can also be embedded (8).
+
+### C++
+
+![C++](./doc/codebook_explained_5.png)
+
+- The same goes for C++ and Kotlin for now.
+
 
 ## Writing blocks
 

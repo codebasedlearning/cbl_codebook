@@ -9,6 +9,10 @@ release checklist in [DEVELOPMENT.md](DEVELOPMENT.md) spells out.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-07-29
+
+- Screenshots added, Readme explained
+
 ## [1.0.1] - 2026-07-28
 
 - Minor warnings and errors from Problem report
