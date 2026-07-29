@@ -1,5 +1,6 @@
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginSignatureTask
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 
 plugins {
@@ -78,6 +79,28 @@ intellijPlatform {
 // name on the task itself, so `base { archivesName }` is not enough.
 tasks.named<Zip>("buildPlugin") {
     archiveBaseName = "codebook"
+}
+
+/*
+ * Works around a bug in IPGP 2.18.1, not in our setup.
+ *
+ * VerifyPluginSignatureTask builds the CLI arguments from `certificateChain`
+ * (the CONTENT, which is what signing reads from CERTIFICATE_CHAIN) like this:
+ *
+ *     yield("-cert"); yield(temporaryCertificateChainFile)   // correct
+ *     yield(<the certificate text itself>)                   // stray argument
+ *
+ * The signer receives that trailing text as an unrecognised positional argument
+ * and exits 64 - a usage error, NOT a bad signature. The duplicated debug line
+ * right next to it says the same thing about how it got there. Its
+ * `certificateChainFile` branch has no such slip, so we send the verify task
+ * down that one; signing itself keeps reading the environment variables.
+ *
+ * Remove once the upstream task is fixed - the symptom to re-test is exit 64.
+ */
+tasks.named<VerifyPluginSignatureTask>("verifyPluginSignature") {
+    certificateChain.set(null as String?)
+    certificateChainFile = rootProject.layout.projectDirectory.file("chain.crt")
 }
 
 kotlin {

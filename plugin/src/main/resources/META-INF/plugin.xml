@@ -32,7 +32,7 @@
          automatically was tried and reverted; the comment in build.gradle.kts
          has the reason. -->
     <change-notes><![CDATA[
-        <b>Initial release</b>
+        <b>1.0.1 — first public release</b>
         <ul>
             <li>Topic outline of a file's dash-framed block comments, with layered notes that follow the caret.</li>
             <li>Markdown rendering (GitHub-flavoured, tables included), images, and links between topics.</li>

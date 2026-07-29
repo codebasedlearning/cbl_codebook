@@ -218,6 +218,18 @@ the variables are absent, so an ordinary `buildPlugin` needs no secrets. In an
 IDE run configuration the multi-line PEM values must be base64-encoded on a
 single line; the task detects and decodes that.
 
+`verifyPluginSignature` needs one workaround, configured in
+`plugin/build.gradle.kts`: on IPGP 2.18.1 the task appends the certificate text
+as a stray CLI argument when it is given the chain as *content*, and the signer
+answers with exit code **64** — a usage error, not a bad signature. The task is
+therefore pointed at `chain.crt` as a file. If it ever fails with 64 again,
+check whether that workaround is still needed before suspecting the key.
+
+Signing is not a publishing gate either way: the Marketplace verifies the
+signature server-side on upload and then re-signs with the JetBrains CA. The
+end-to-end check is installing the signed zip from disk — a valid signature
+installs with no warning dialog.
+
 ## Release checklist
 
 The version number is written in exactly **one** place: `version` in
