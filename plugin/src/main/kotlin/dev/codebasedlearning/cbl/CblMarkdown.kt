@@ -48,10 +48,18 @@ object CblMarkdown {
      *  null for same-file refs. */
     class Resolved(val block: CblBlock, val baseDir: java.io.File? = null)
 
-    /** Embed syntax: ![...](#ref) or ![...](path.md#ref) - the image form
-     *  carries transclusion semantics, exactly as it does for images.
-     *  Ordinary images never contain '#'. */
-    private val EMBED = Regex("""!\[[^\]]*]\(([^)\s]*#[^)\s]+)\)""")
+    /**
+     * Embed syntax: ![...](#ref) or ![...](path.md#ref) - the image form
+     * carries transclusion semantics, exactly as it does for images.
+     * Ordinary images never contain '#'.
+     *
+     * A SECOND leading '!' (group 1) pins the embed open: `!![](#ref)` is a
+     * transclusion - text that belongs here and is merely kept in one place -
+     * while `![](#ref)` is a question, folded until asked. Two different
+     * intentions, one character apart, and the extra '!' costs a foreign
+     * renderer nothing but a literal '!'.
+     */
+    private val EMBED = Regex("""(!?)!\[[^\]]*]\(([^)\s]*#[^)\s]+)\)""")
 
     /**
      * A RUN of stand-alone embeds: consecutive lines that hold nothing but an
@@ -68,8 +76,8 @@ object CblMarkdown {
      * next paragraph's Markdown no longer being rendered.
      */
     private val EMBED_RUN = Regex(
-        """(?m)^[ \t]*!\[[^\]]*]\([^)\s]*#[^)\s]+\)""" +
-            """(?:(?:[ \t]*\R[ \t]*)+!\[[^\]]*]\([^)\s]*#[^)\s]+\))*[ \t]*"""
+        """(?m)^[ \t]*!?!\[[^\]]*]\([^)\s]*#[^)\s]+\)""" +
+            """(?:(?:[ \t]*\R[ \t]*)+!?!\[[^\]]*]\([^)\s]*#[^)\s]+\))*[ \t]*"""
     )
 
     /** Custom link scheme for fold/unfold of embedded blocks - the panel's
@@ -78,9 +86,10 @@ object CblMarkdown {
 
     /**
      * Short ref form: brackets WITHOUT parentheses, containing a fragment -
-     * `[#main-guard]` references, `![#main-guard]` embeds, and an explicit path
-     * works too (`![../notes.md#tco]`). A CommonMark shortcut reference, so a
-     * foreign renderer prints it as literal text instead of mangling it.
+     * `[#main-guard]` references, `![#main-guard]` embeds, `!![#main-guard]`
+     * pins one open, and an explicit path works too (`![../notes.md#tco]`).
+     * A CommonMark shortcut reference, so a foreign renderer prints it as
+     * literal text instead of mangling it.
      *
      * The lookahead keeps the full forms out: `[t](#r)`, `![](#r)`, `[#r][l]`.
      * Prose brackets never match, because the content must contain a '#' and no
@@ -89,7 +98,7 @@ object CblMarkdown {
      * blanket "no colon after" would break ordinary prose such as
      * "`@staticmethod` is a [#decorator]: it changes …".
      */
-    private val SHORTCUT = Regex("""(!?)\[([^\]\s]*#[^\]\s]+)](?![(\[])""")
+    private val SHORTCUT = Regex("""(!{0,2})\[([^\]\s]*#[^\]\s]+)](?![(\[])""")
 
     /**
      * True for a link reference definition: `[#ref]: destination` at the start
@@ -130,7 +139,9 @@ object CblMarkdown {
             candidates.firstOrNull { titleOf(it) != null } ?: candidates.first()
         }
         if (bang.isNotEmpty()) {
-            "![]($destination)"
+            // one bang embeds, two pin it open - passed through as written, so
+            // the embed pass is the only place that knows what they mean
+            "$bang[]($destination)"
         } else {
             val text = titleOf(destination)
             if (text == null) "&#9888; *unresolved reference: `$content`*"
@@ -147,6 +158,10 @@ object CblMarkdown {
      * [expanded] decides per ref whether the body is spliced or folded to a
      * title-only toggle line (Swing HTML has no <details> - the title is a
      * TOGGLE_SCHEME link instead, default: everything expanded).
+     *
+     * An embed with TEXT IN FRONT OF IT on the same line is inline instead:
+     * see [inlineEmbed]. Position decides, not syntax, so nothing new has to
+     * be written for it.
      */
     fun resolveEmbeds(
         markdown: String,
@@ -157,16 +172,79 @@ object CblMarkdown {
         // runs of two or more stand-alone embeds share one frame; a single one
         // is left to the pass below, so its output is unchanged
         val grouped = EMBED_RUN.replace(markdown) { run ->
-            val refs = EMBED.findAll(run.value).map { it.groupValues[1] }.toList()
+            val refs = EMBED.findAll(run.value)
+                .map { it.groupValues[1].isNotEmpty() to it.groupValues[2] }.toList()
             if (refs.size < 2) run.value
-            else frame(refs.map { entry(it, depth, expanded, resolve).markdown })
+            else frame(refs.map { (pinned, ref) -> entry(ref, depth, expanded, resolve, pinned).markdown })
         }
         return EMBED.replace(grouped) { match ->
-            val ref = match.groupValues[1]
-            val entry = entry(ref, depth, expanded, resolve)
-            if (entry.framed) frame(listOf(entry.markdown)) else entry.markdown
+            val pinned = match.groupValues[1].isNotEmpty()
+            val ref = match.groupValues[2]
+            if (isInline(grouped, match.range.first)) {
+                inlineEmbed(ref, depth, expanded, resolve, pinned)
+            } else {
+                val entry = entry(ref, depth, expanded, resolve, pinned)
+                if (entry.framed) frame(listOf(entry.markdown)) else entry.markdown
+            }
         }
     }
+
+    /** True if something other than whitespace precedes [start] on its line -
+     *  i.e. the embed sits IN a sentence rather than on a line of its own. */
+    private fun isInline(text: String, start: Int): Boolean {
+        for (i in start - 1 downTo 0) {
+            val c = text[i]
+            if (c == '\n') return false
+            if (!c.isWhitespace()) return true
+        }
+        return false
+    }
+
+    /**
+     * An embed inside a sentence ("What prints `cout << v1`? ![#answer-x]"):
+     * the ref becomes its target's HEADLINE followed by the toggle arrow, right
+     * where it stands, and nothing else - no frame, no line break. The sentence
+     * keeps its shape and the reader can see what is behind the arrow before
+     * clicking. Which puts the burden where it belongs: a headline must not
+     * give away what the block answers, so answer blocks stay neutrally named
+     * (`## Answer 0x02-3`) or ask the question themselves.
+     *
+     * Unfolded, the arrow flips and the body follows in the usual frame
+     * directly below the paragraph - unheadlined, since the headline is already
+     * standing in the sentence above it. Inline the body cannot go: a glossary
+     * entry is block content (lists, tables, images), and Markdown has no way
+     * to put a block inside a paragraph. The frame is what terminates that
+     * paragraph, hence the trailing blank line - same contract as [frame]'s
+     * other callers.
+     */
+    private fun inlineEmbed(
+        ref: String,
+        depth: Int,
+        expanded: (String) -> Boolean,
+        resolve: (String) -> Resolved?,
+        pinned: Boolean = false,
+    ): String {
+        val resolved = resolve(ref) ?: return "&#9888; *unresolved reference: `$ref`*"
+        if (depth >= 1) return "*&#8230; see `$ref` (nested embed not expanded)*"
+        val title = titleText(resolved.block.title)
+        // plain, not bold: this sits mid-sentence, and the link colour marks it
+        val toggle = { arrow: String -> "[$title $arrow]($TOGGLE_SCHEME$ref)" }
+        if (!pinned && !expanded(ref)) return toggle("&#9656;")
+        var body = resolveEmbeds(resolved.block.bodyLines.joinToString("\n"), depth + 1, expanded, resolve)
+        resolved.baseDir?.let { body = rebaseImages(body, it) }
+        // pinned: the headline stays, the arrow goes - there is nothing to click
+        val head = if (pinned) title else toggle("&#9662;")
+        return head + frame(listOf(body)) + "\n"
+    }
+
+    /**
+     * A block title as rendered text. Brackets are escaped - a title may
+     * legitimately contain them ("See [#acdf] for details"), and an unescaped
+     * one would end a link text early and leave the rest as prose. The escapes
+     * are inert everywhere else, so the same form serves headlines too.
+     */
+    private fun titleText(title: String): String = title.ifBlank { "(untitled)" }
+        .replace("[", "\\[").replace("]", "\\]")
 
     /** One entry of an embed frame; [framed] is false for the degraded forms
      *  (unresolved, nesting cap), which render as inline notes. */
@@ -177,18 +255,22 @@ object CblMarkdown {
         depth: Int,
         expanded: (String) -> Boolean,
         resolve: (String) -> Resolved?,
+        pinned: Boolean = false,
     ): Entry {
         val resolved = resolve(ref)
         return when {
             resolved == null -> Entry("&#9888; *unresolved reference: `$ref`*", framed = false)
             depth >= 1 -> Entry("*&#8230; see `$ref` (nested embed not expanded)*", framed = false)
             // folded: title-only line, '▸' toggle link
-            !expanded(ref) ->
-                Entry("[&#9656; **${resolved.block.title}**]($TOGGLE_SCHEME$ref)", framed = true)
+            !pinned && !expanded(ref) ->
+                Entry("[&#9656; **${titleText(resolved.block.title)}**]($TOGGLE_SCHEME$ref)", framed = true)
             else -> {
                 var body = resolveEmbeds(resolved.block.bodyLines.joinToString("\n"), depth + 1, expanded, resolve)
                 resolved.baseDir?.let { body = rebaseImages(body, it) }
-                Entry("[&#9662; **${resolved.block.title}**]($TOGGLE_SCHEME$ref)\n\n$body", framed = true)
+                // pinned: a headline, no arrow and no link - nothing folds here
+                val head = if (pinned) "**${titleText(resolved.block.title)}**"
+                else "[&#9662; **${titleText(resolved.block.title)}**]($TOGGLE_SCHEME$ref)"
+                Entry("$head\n\n$body", framed = true)
             }
         }
     }

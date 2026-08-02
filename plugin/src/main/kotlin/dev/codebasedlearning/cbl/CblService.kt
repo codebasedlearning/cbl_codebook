@@ -13,6 +13,7 @@ import com.intellij.openapi.editor.event.CaretEvent
 import com.intellij.openapi.editor.event.CaretListener
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
@@ -31,6 +32,10 @@ class CblService(private val project: Project) : Disposable {
 
     var model: CblModel? = null
         private set
+
+    /** The editor [model] was parsed from, i.e. the only editor whose caret and
+     *  document say anything about it (see the multicaster filters below). */
+    private var modelEditor: Editor? = null
 
     private val modelListeners = mutableListOf<() -> Unit>()
     private val caretListeners = mutableListOf<(Int) -> Unit>()
@@ -62,18 +67,30 @@ class CblService(private val project: Project) : Disposable {
             }
         })
 
+        /*
+         * The multicaster fires for EVERY editor of this project, and a Run
+         * console is an editor: it has our project, a document, and a caret
+         * that jumps to the end on every line of output. Unfiltered, running a
+         * file therefore fed the CONSOLE's caret offset to the panel, which
+         * resolved it against the SOURCE file's model - a small offset, so the
+         * outline jumped to the first topic while the reader's caret had not
+         * moved at all. Diff views, the commit dialog and the debugger's
+         * evaluate field are editors too, with the same effect.
+         *
+         * Hence the filter: only the editor the model was parsed from speaks
+         * for the model. Same for document changes - console output must not
+         * trigger a re-parse of the source file every 700ms.
+         */
         val multicaster = EditorFactory.getInstance().eventMulticaster
         multicaster.addCaretListener(object : CaretListener {
             override fun caretPositionChanged(event: CaretEvent) {
-                val editor = event.editor
-                if (editor.project === project) {
-                    val offset = editor.caretModel.offset
-                    caretListeners.forEach { it(offset) }
-                }
+                if (event.editor !== modelEditor) return
+                caretListeners.forEach { it(event.editor.caretModel.offset) }
             }
         }, this)
         multicaster.addDocumentListener(object : DocumentListener {
             override fun documentChanged(event: DocumentEvent) {
+                if (event.document !== modelEditor?.document) return
                 alarm.cancelAllRequests()
                 alarm.addRequest({ refresh() }, 700)
             }
@@ -86,6 +103,7 @@ class CblService(private val project: Project) : Disposable {
     /** Must be called on the EDT (all our callers are). */
     fun refresh() {
         val editor = FileEditorManager.getInstance(project).selectedTextEditor
+        modelEditor = editor
         if (editor == null) {
             model = null
             modelListeners.forEach { it() }
@@ -104,6 +122,7 @@ class CblService(private val project: Project) : Disposable {
     }
 
     override fun dispose() {
+        modelEditor = null
         modelListeners.clear()
         caretListeners.clear()
     }

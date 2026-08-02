@@ -39,6 +39,14 @@ import com.intellij.psi.PsiRecursiveElementWalkingVisitor
  *  - The framed text is the title, the remaining interior lines are the body
  *    (Markdown).
  *  - A block extends until the next block or end of file. No end markers.
+ *  - A title ending in an anchor - `## Background Const <a id="acdf"></a>` -
+ *    is addressed by that label INSTEAD of by its title slug. The anchor is
+ *    stripped from the title, so only the front part is ever shown (see
+ *    [CblParser.splitLabel]).
+ *  - A title starting with a dot (`---- .Setup ----`) is UNLISTED: the dot is
+ *    a marker, not text - it is stripped from the title, and the block is
+ *    skipped in the TOC. Everything else stays as it is (body, breadcrumb,
+ *    folding, refs, extent), and its children keep their own listing.
  */
 
 class CblBlock(val headerRange: TextRange) {
@@ -54,6 +62,31 @@ class CblBlock(val headerRange: TextRange) {
 
     /** child topics are rendered indented in the TOC */
     val isChild: Boolean get() = depth > 1
+
+    /**
+     * Dotted title (`---- .Setup ----`): the block still carries its notes,
+     * folds, and answers to refs, but it appears in NEITHER the outline nor the
+     * breadcrumb - the two places that describe where a reader is. Scaffolding
+     * a file needs but a reader should not have to walk past. The dot itself is
+     * consumed by the parser, so [title] never carries it.
+     */
+    var isUnlisted: Boolean = false
+        internal set
+
+    /**
+     * Explicit address, from a trailing anchor in the header
+     * (`## Background Const <a id="acdf"></a>`), slugified. It REPLACES the
+     * title slug in [slug]: the point of naming a block is that the name, not
+     * the wording of its title, is what refs hold on to - so the title is free
+     * to change, and a ref that still uses the old title slug should fail
+     * loudly rather than resolve to something that only looks right.
+     *
+     * The label is consumed by the parser, so [title] never carries it, and
+     * every place a title is shown - TOC, breadcrumb, embed frame, the link
+     * text of a `[#ref]` - shows the front part alone.
+     */
+    var label: String? = null
+        internal set
 
     /**
      * Fold range: from the end of the frame line to the end of the comment, so
@@ -87,8 +120,9 @@ class CblBlock(val headerRange: TextRange) {
     /** Title as inline HTML (Markdown rendered), cached for the TOC renderer. */
     val titleHtml: String by lazy { CblMarkdown.inlineToHtml(title.ifBlank { "(untitled)" }) }
 
-    /** GitHub-style anchor slug of the title, the block's address in #refs. */
-    val slug: String by lazy { CblModel.slugOf(title) }
+    /** The block's address in #refs: its [label] if it declares one, otherwise
+     *  the GitHub-style anchor slug of the title. */
+    val slug: String by lazy { label ?: CblModel.slugOf(title) }
 
     internal fun finish() {
         bodyLines.addAll(rawBody.dropWhile { it.isBlank() }.dropLastWhile { it.isBlank() })
@@ -98,6 +132,10 @@ class CblBlock(val headerRange: TextRange) {
 }
 
 class CblModel(val blocks: List<CblBlock>) {
+    /** The TOC's view of the file: everything but the dotted (unlisted)
+     *  blocks. Every other consumer works on [blocks]. */
+    val listedBlocks: List<CblBlock> get() = blocks.filter { !it.isUnlisted }
+
     fun blockAt(offset: Int): CblBlock? =
         blocks.lastOrNull { offset >= it.startOffset && offset <= it.endOffset }
 
@@ -219,6 +257,8 @@ object CblParser {
             block.startOffset = extentStart(text, range.startOffset)
             block.depth = header.depth
             block.title = header.title
+            block.isUnlisted = header.unlisted
+            block.label = header.label
             block.rawBody.addAll(header.body)
             // fold the body only: start after the frame line, which is the
             // header.line-th line of the comment (0-based, usually 0)
@@ -240,6 +280,7 @@ object CblParser {
      * heading, depth = heading level (capped at [MAX_DEPTH]). Slugs thus
      * match GitHub's own anchors. Fenced code blocks are skipped so a
      * Python '# comment' inside a fence is not mistaken for a heading.
+     * The dotted-title rule holds here as well ('## .Internals').
      */
     fun parseMarkdown(text: String): CblModel {
         val blocks = mutableListOf<CblBlock>()
@@ -253,7 +294,11 @@ object CblParser {
             if (hashes in 1..6 && t.getOrNull(hashes) == ' ') {
                 val block = CblBlock(TextRange(offset, lineEnd))
                 block.depth = minOf(hashes, MAX_DEPTH)
-                block.title = t.substring(hashes + 1).trim()
+                val (marked, unlisted) = splitMarker(t.substring(hashes + 1).trim())
+                val (title, label) = splitLabel(marked)
+                block.title = title
+                block.isUnlisted = unlisted
+                block.label = label
                 blocks.add(block)
             } else {
                 blocks.lastOrNull()?.rawBody?.add(line.trimEnd())
@@ -310,7 +355,53 @@ object CblParser {
         /** 0-based line of the frame WITHIN the comment (0 unless the frame
          *  sits below a bare opening delimiter) */
         val line: Int,
+        /** title was dotted - keep it out of the TOC (see [CblBlock.isUnlisted]) */
+        val unlisted: Boolean = false,
+        /** trailing `[#label]`, the block's explicit address (see [CblBlock.label]) */
+        val label: String? = null,
     )
+
+    /**
+     * Splits the unlisted marker off a title: a LEADING dot means "not in the
+     * TOC" and is not part of the text (`.Setup helpers` -> `Setup helpers`).
+     * Exactly one dot is consumed, and only at the very front - a dot anywhere
+     * else (`v1.2`, `etc.`) is ordinary text.
+     */
+    internal fun splitMarker(title: String): Pair<String, Boolean> =
+        if (title.startsWith(".")) title.removePrefix(".").trim() to true else title to false
+
+    /**
+     * A label at the END of a title: `Background Const <a id="acdf"></a>`.
+     *
+     * An ordinary HTML anchor, and nothing invented: every Markdown renderer
+     * passes it through and shows NOTHING, so the heading stays clean in the
+     * panel, in exports and on GitHub - where it doubles as a real anchor
+     * (`#user-content-acdf`) - and it can be tabbed far to the right, out of
+     * the way of the prose. A syntax of our own would have had to be explained
+     * to every one of those renderers, and to every reader.
+     *
+     * `name=` is accepted alongside `id=` (GitHub's own docs still use it), as
+     * is a lone or self-closed `<a …>`: only `<a id="x"></a>` is valid HTML5 -
+     * `a` is not a void element - but a parser that quietly ignored the other
+     * spellings would leave raw HTML in the title, where it renders as nothing
+     * and is impossible to see.
+     */
+    private val LABEL = Regex(
+        """\s*<a\s[^<>]*\b(?:id|name)\s*=\s*["']([^"']+)["'][^<>]*>\s*(?:</a\s*>)?\s*$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Splits a trailing [LABEL] off a title, slugified. Null label = the title
+     * keeps its own slug, i.e. everything written before this existed still
+     * addresses the way it always did.
+     */
+    internal fun splitLabel(title: String): Pair<String, String?> {
+        val match = LABEL.find(title) ?: return title to null
+        val label = CblModel.slugOf(match.groupValues[1])
+        if (label.isEmpty()) return title to null
+        return title.substring(0, match.range.first).trim() to label
+    }
 
     /**
      * Offset of the end of the [n]-th line (0-based) starting at [from], i.e.
@@ -347,10 +438,14 @@ object CblParser {
                 if (!title.isNullOrEmpty()) {
                     val rest = groupOf(match, "rest")?.trim().orEmpty()
                     val body = lines.drop(index + 1)
+                    val (marked, unlisted) = splitMarker(title)
+                    val (text, label) = splitLabel(marked)
                     return Header(
-                        i + 1, title,
+                        i + 1, text,
                         if (rest.isEmpty()) body else listOf(rest) + body,
                         line = index,
+                        unlisted = unlisted,
+                        label = label,
                     )
                 }
             }
@@ -412,16 +507,63 @@ object CblParser {
      * (a lone '*' or '* ' prefix). Bare '*'/'**' prefixes are left intact so
      * Markdown emphasis survives; consequently, Markdown lists in CBL
      * comments should use '-' rather than '*'.
+     *
+     * RELATIVE indentation is preserved, absolute indentation is not: the
+     * common indent of the body is measured and removed, so the body starts at
+     * column 0 no matter how deep the comment sits in the code, while anything
+     * indented FURTHER keeps the difference. That difference is structure in
+     * Markdown - it is what makes a sub-list a sub-list - and trimming every
+     * line (which this did until v1.0.3) silently flattened every nested list
+     * in a CBL comment into a sequence of sibling lists.
+     *
+     * The frame line is excluded from the measurement and trimmed outright:
+     * it usually starts one space after the opening delimiter, an accidental
+     * column that the whole body would otherwise inherit.
      */
-    private fun cleanLines(content: String): List<String> =
-        content.lines().map { line ->
-            val t = line.trim()
+    private fun cleanLines(content: String): List<String> {
+        val lines = content.lines().map { stripDecoration(it) }
+        val frame = lines.indexOfFirst { it.isNotBlank() }
+        val indent = lines.drop(frame + 1)
+            .filter { it.isNotBlank() }
+            .minOfOrNull { line -> line.takeWhile { it == ' ' }.length } ?: 0
+        return lines.mapIndexed { i, line ->
             when {
-                t == "*" -> ""
-                t.startsWith("* ") -> t.substring(2)
-                else -> t
+                line.isBlank() -> ""
+                i == frame -> line.trim()
+                else -> line.substring(indent)
             }
         }
+    }
+
+    /**
+     * One line without its boxed-comment decoration: for a ' * ' line the star
+     * column becomes the new left margin (so indentation AFTER the star is what
+     * counts), everything else keeps its leading whitespace. Leading tabs are
+     * expanded first - CommonMark measures indentation in columns, and a body
+     * that mixes tabs and spaces would otherwise dedent by the wrong amount.
+     */
+    private fun stripDecoration(raw: String): String {
+        val line = expandLeadingTabs(raw.trimEnd())
+        val start = line.indexOfFirst { it != ' ' }
+        if (start < 0) return ""
+        val rest = line.substring(start)
+        return when {
+            rest == "*" -> ""
+            rest.startsWith("* ") -> rest.substring(2)
+            else -> line
+        }
+    }
+
+    /** Leading tabs as [TAB_WIDTH] spaces each. Not true tab stops - close
+     *  enough for indentation that is compared against itself. */
+    private fun expandLeadingTabs(line: String): String {
+        val lead = line.takeWhile { it == ' ' || it == '\t' }
+        if ('\t' !in lead) return line
+        val width = lead.sumOf { if (it == '\t') TAB_WIDTH else 1 }
+        return " ".repeat(width) + line.substring(lead.length)
+    }
+
+    private const val TAB_WIDTH = 4
 }
 
 /**

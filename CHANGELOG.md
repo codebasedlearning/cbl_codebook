@@ -9,6 +9,26 @@ release checklist in [DEVELOPMENT.md](DEVELOPMENT.md) spells out.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-07-31
+
+- Unlisted (dotted) blocks are skipped in the breadcrumb.
+- Pinned embeds: a second `!` (`!![#tco]`, `!![](notes.md#tco)`) includes the
+  block outright.
+- Inline embeds now show the target's headline before the `▸` instead of a bare
+  arrow.
+- Block labels: a header ending in an anchor - `## Background Const
+  <a id="acdf"></a>` - is addressed by that label instead of by its title slug,
+  and the anchor is stripped from the title.
+- Outline and notes pane indent by the same amount per level.
+- body's common indent is removed instead of trimming every line
+- The outline no longer jumps to the first topic while a program runs
+
+## [1.0.3] - 2026-07-31
+
+- Inline embeds: an embed with text in front of it on the same line renders as
+  a bare, clickable `▸` in that line.
+- Dotted titles (`---- .Setup ----`) are unlisted.
+
 ## [1.0.2] - 2026-07-29
 
 - Screenshots added, Readme explained

@@ -185,6 +185,135 @@ class CblParserTest : BasePlatformTestCase() {
         assertEquals(1, model.blocks.count { it.title == "TOC" })
     }
 
+    /**
+     * Indentation is structure in Markdown: a sub-list is a sub-list only
+     * because it is indented under its parent item. The comment's own column -
+     * two spaces or ten, depending on where the code sits - is not, and must go.
+     * So: common indent removed, everything deeper kept.
+     */
+    fun testNestedListIndentationSurvivesTheComment() {
+        val file = myFixture.configureByText(
+            "Demo.java",
+            """
+            class Demo {
+                void f() {
+                    /* ---- Lists ----
+                       - one
+                         - nested
+                       - two */
+                }
+            }
+            """.trimIndent()
+        )
+        val body = CblParser.parse(file).blocks.single().bodyLines
+        assertEquals(listOf("- one", "  - nested", "- two"), body)
+        // ... which is what makes the renderer nest them
+        val html = CblMarkdown.toHtml(body.joinToString("\n"))
+        assertEquals("one list inside another", 2, Regex("<ul").findAll(html).count())
+    }
+
+    /** The same label form works in a comment header, dot marker included. */
+    fun testHeaderLabelReplacesTheTitleSlug() {
+        val file = myFixture.configureByText(
+            "Demo.java",
+            """
+            /* ---- Background Const <a id="acdf"></a> ---- what `const` promises */
+            class A {}
+            /* ---- .Setup helpers <a id="setup"></a> ---- */
+            class B {}
+            """.trimIndent()
+        )
+        val model = CblParser.parse(file)
+        val labelled = model.blocks[0]
+        assertEquals("Background Const", labelled.title)
+        assertEquals("acdf", labelled.slug)
+        assertEquals(listOf("what `const` promises"), labelled.bodyLines)
+        assertNull("the title slug is replaced, not extended", model.blockByRef("background-const"))
+
+        // marker and label are independent, and neither survives into the title
+        val hidden = model.blocks[1]
+        assertTrue(hidden.isUnlisted)
+        assertEquals("Setup helpers", hidden.title)
+        assertEquals("setup", hidden.slug)
+    }
+
+    /** Same for the boxed form, where the star column is the left margin. */
+    fun testBoxedCommentKeepsIndentationAfterTheStar() {
+        val file = myFixture.configureByText(
+            "Demo.java",
+            """
+            /*
+             * ---- Lists ----
+             *   - one
+             *     - nested
+             */
+            class A {}
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf("- one", "  - nested"),
+            CblParser.parse(file).blocks.single().bodyLines
+        )
+    }
+
+    /**
+     * The dotted title: a block the TOC does not list, while everything else
+     * about it stays untouched - body, breadcrumb, folding, extent, and the
+     * slug refs address it by. The dot is a marker, not text, so it never
+     * reaches the title.
+     */
+    fun testDottedTitlesAreUnlistedButOtherwiseNormalBlocks() {
+        val file = myFixture.configureByText(
+            "Demo.java",
+            """
+            /* ---- .Setup helpers ---- boilerplate, not a topic */
+            class Setup {}
+            /* --- Still listed --- */
+            class A {}
+            /* ---- Version 1.2 ---- dots elsewhere are ordinary text */
+            class B {}
+            """.trimIndent()
+        )
+        val model = CblParser.parse(file)
+        assertEquals(3, model.blocks.size)
+
+        val hidden = model.blocks[0]
+        assertTrue(hidden.isUnlisted)
+        assertEquals("Setup helpers", hidden.title)          // marker stripped
+        assertEquals("setup-helpers", hidden.slug)           // refs keep working
+        assertEquals(listOf("boilerplate, not a topic"), hidden.bodyLines)
+        assertSame(hidden, model.blockByRef("setup-helpers"))
+
+        // the child of an unlisted parent stays listed, and keeps its chain
+        val child = model.blocks[1]
+        assertFalse(child.isUnlisted)
+        assertEquals(listOf(hidden), model.chainOf(child))
+
+        // a dot anywhere but at the front is text
+        assertFalse(model.blocks[2].isUnlisted)
+        assertEquals("Version 1.2", model.blocks[2].title)
+
+        // ... and only that one block is missing from the TOC's view
+        assertEquals(
+            listOf("Still listed", "Version 1.2"),
+            model.listedBlocks.map { it.title }
+        )
+    }
+
+    /** Same rule for markdown headings, which are the blocks there. */
+    fun testDottedMarkdownHeadingIsUnlisted() {
+        val model = CblParser.parseMarkdown(
+            """
+            # Glossary
+            ## .Internals
+            not for the outline
+            """.trimIndent()
+        )
+        assertEquals(listOf(false, true), model.blocks.map { it.isUnlisted })
+        assertEquals("Internals", model.blocks[1].title)
+        assertEquals(listOf("Glossary"), model.listedBlocks.map { it.title })
+    }
+
     fun testBlockOpeningAConstructOwnsItsHeaderLine() {
         val file = myFixture.configureByText(
             "Demo.java",

@@ -48,6 +48,102 @@ class CblRefsTest : TestCase() {
         assertEquals("tail-call-optimization-tco", CblModel.slugOf("Tail-call optimization (TCO)"))
     }
 
+    /**
+     * A labelled heading: the block is addressed by the label, and shown by the
+     * front part of the title alone. The two halves of the feature - a stable
+     * address, a readable link text - are what makes a glossary survive an
+     * edit of its own headings.
+     */
+    fun testLabelledHeadingIsAddressedByItsLabelAndShownWithout() {
+        val m = CblParser.parseMarkdown(
+            """
+            # Glossary
+
+            ## Background Const <a id="acdf"></a>
+
+            `const` binds a promise, not a storage class.
+
+            ## Plain Heading
+            """.trimIndent()
+        )
+        val labelled = m.blocks[1]
+        assertEquals("Background Const", labelled.title)   // the label is not text
+        assertEquals("acdf", labelled.label)
+        assertEquals("acdf", labelled.slug)
+        assertSame(labelled, m.blockByRef("acdf"))
+        assertSame("qualified refs address the label too", labelled, m.blockByRef("glossary:acdf"))
+        // the label REPLACES the title slug - a ref by title must fail loudly
+        assertNull(m.blockByRef("background-const"))
+        // ... while an unlabelled heading is untouched
+        assertNull(m.blocks[2].label)
+        assertSame(m.blocks[2], m.blockByRef("plain-heading"))
+
+        // link text and embed title show the front part alone
+        assertEquals(
+            "see [Background Const](#acdf)",
+            CblMarkdown.expandShortcuts("see [#acdf]") { ref ->
+                m.blockByRef(ref.removePrefix("#"))?.title
+            }
+        )
+        val embed = CblMarkdown.resolveEmbeds("![](#acdf)", resolve = resolver(m))
+        assertTrue("the frame is titled with the front part", "**Background Const**" in embed)
+        assertTrue("binds a promise" in embed)
+    }
+
+    /**
+     * The spellings a label may be written in: `id` and GitHub's older `name`,
+     * either quote, any case - and the two invalid closings, taken on purpose.
+     * `<a id="x"/>` and a lone `<a id="x">` are not legal HTML5, but leaving
+     * them in the title would hide raw markup where it renders as nothing.
+     */
+    fun testLabelSpellingVariants() {
+        val m = CblParser.parseMarkdown(
+            """
+            # Glossary
+
+            ## Zero Overhead <a name='zo'></a>
+
+            body
+
+            ## Half Written <a id="hw">
+
+            body
+
+            ## Self Closed <A ID="SC"/>
+
+            body
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf("Glossary", "Zero Overhead", "Half Written", "Self Closed"),
+            m.blocks.map { it.title }
+        )
+        assertEquals(listOf(null, "zo", "hw", "sc"), m.blocks.map { it.label })
+        assertSame(m.blocks[1], m.blockByRef("zo"))
+    }
+
+    /**
+     * Only a TRAILING anchor is a label. Everything else in a heading - an
+     * anchor in the middle, a real link, and the bracket form the refs are
+     * written in - is text, and slugs the way it always did.
+     */
+    fun testAnythingButATrailingAnchorIsHeadingText() {
+        val m = CblParser.parseMarkdown(
+            """
+            # See [#acdf] for the details
+
+            ## Answer 0x02-3 [#a2-3]
+
+            ## A <a href="x">link</a> in a heading
+            """.trimIndent()
+        )
+        assertEquals(listOf(null, null, null), m.blocks.map { it.label })
+        assertEquals("See [#acdf] for the details", m.blocks[0].title)
+        // the bracket form addresses a block, it never names one
+        assertEquals("Answer 0x02-3 [#a2-3]", m.blocks[1].title)
+        assertSame(m.blocks[1], m.blockByRef("answer-0x02-3-a2-3"))
+    }
+
     fun testHierarchicalResolutionMatchesAChainSuffix() {
         val m = CblParser.parseMarkdown(
             """
@@ -98,6 +194,102 @@ class CblRefsTest : TestCase() {
         )
         assertTrue("unfolded embed keeps the toggle link", toggle in unfolded)
         assertTrue("unfolded embed splices the body", "use spaces, not tabs" in unfolded)
+    }
+
+    /**
+     * The quiz form: a question, and the answer behind an arrow in the same
+     * line. The target's HEADLINE stands in the sentence, the arrow after it,
+     * and the body appears only when unfolded - the headline is the author's
+     * responsibility, the body is the plugin's.
+     */
+    fun testInlineEmbedShowsTheHeadlineThenTheArrow() {
+        val m = model()
+        val toggle = "${CblMarkdown.TOGGLE_SCHEME}#code-style"
+        val question = "What prints `cout << v1`? ![](#code-style)"
+
+        val folded = CblMarkdown.resolveEmbeds(question, expanded = { false }, resolve = resolver(m))
+        assertEquals("no frame while folded", 0, frameCount(folded))
+        assertTrue(
+            "headline and arrow sit inline, in the question's line",
+            "v1`? [Code Style &#9656;]($toggle)" in folded
+        )
+        assertFalse("folded inline embed must not splice the body", "use spaces, not tabs" in folded)
+        // one paragraph, one link - the sentence survives the pass
+        val html = CblMarkdown.toHtml(folded)
+        assertEquals(1, Regex("<p>").findAll(html).count())
+
+        val unfolded = CblMarkdown.resolveEmbeds(question, expanded = { true }, resolve = resolver(m))
+        assertTrue("unfolded flips the arrow", "[Code Style &#9662;]($toggle)" in unfolded)
+        assertEquals("the body comes framed, below", 1, frameCount(unfolded))
+        assertTrue("use spaces, not tabs" in unfolded)
+        // the headline stands in the sentence, so the frame does not repeat it
+        assertFalse("**Code Style**" in unfolded)
+    }
+
+    /** Brackets in a title would end the link text early - they are escaped. */
+    fun testTitleBracketsSurviveTheToggleLink() {
+        val m = CblParser.parseMarkdown("# T\n\n## See [x] first\n\nbody")
+        val inline = CblMarkdown.resolveEmbeds(
+            "ref ![](#see-x-first)", expanded = { false }, resolve = resolver(m)
+        )
+        assertTrue("See \\[x\\] first &#9656;" in inline)
+        // ... and it renders as ONE link, not as a short link plus stray prose
+        val html = CblMarkdown.toHtml(inline)
+        assertEquals(1, Regex("<a ").findAll(html).count())
+        assertTrue("See [x] first" in html)
+    }
+
+    /** Text following an inline embed must stay Markdown, i.e. the frame has to
+     *  close with a blank line (same contract as the stand-alone forms). */
+    fun testInlineEmbedIsFollowedByABlankLine() {
+        val m = model()
+        val text = CblMarkdown.resolveEmbeds(
+            "question? ![](#code-style)\nafter **bold**\n", expanded = { true }, resolve = resolver(m)
+        )
+        assertTrue("blank line missing after the frame", "</div>\n\n" in text)
+        assertTrue("<strong>bold</strong>" in CblMarkdown.toHtml(text))
+    }
+
+    /** A line that holds nothing but the embed keeps the titled, framed form -
+     *  position is what distinguishes the two, and only that. */
+    fun testStandaloneEmbedIsUnaffectedByTheInlineForm() {
+        val m = model()
+        val folded = CblMarkdown.resolveEmbeds(
+            "  ![](#code-style)", expanded = { false }, resolve = resolver(m)
+        )
+        assertEquals(1, frameCount(folded))
+        assertTrue("stand-alone embeds still show their title", "Code Style" in folded)
+    }
+
+    /**
+     * `!!` pins an embed open: a transclusion, not a question. Same frame, same
+     * headline, but no arrow and no toggle link - there is nothing to fold, so
+     * the fold state is never consulted (`expanded = { false }` below).
+     */
+    fun testDoubleBangPinsAnEmbedOpen() {
+        val m = model()
+        val pinned = CblMarkdown.resolveEmbeds(
+            "!![](#code-style)", expanded = { false }, resolve = resolver(m)
+        )
+        assertEquals("still framed", 1, frameCount(pinned))
+        assertTrue("headline stays", "**Code Style**" in pinned)
+        assertTrue("body is spliced despite the fold state", "use spaces, not tabs" in pinned)
+        assertFalse("no toggle link", CblMarkdown.TOGGLE_SCHEME in pinned)
+        assertFalse("no arrow", "&#9656;" in pinned || "&#9662;" in pinned)
+        // the extra '!' is consumed, not left in the text
+        assertFalse("!" in CblMarkdown.toHtml(pinned).substringBefore("Code Style"))
+
+        // inline, the headline stands in the sentence and the body follows
+        val inline = CblMarkdown.resolveEmbeds(
+            "as defined here: !![](#code-style)", expanded = { false }, resolve = resolver(m)
+        )
+        assertTrue("here: Code Style" in inline)
+        assertFalse(CblMarkdown.TOGGLE_SCHEME in inline)
+        assertTrue("use spaces, not tabs" in inline)
+
+        // and the short form carries the second bang through
+        assertEquals("!![](dictionary.md#tco)", CblMarkdown.expandShortcuts("!![#tco]", listOf("dictionary.md")) { "T" })
+        assertEquals("![](dictionary.md#tco)", CblMarkdown.expandShortcuts("![#tco]", listOf("dictionary.md")) { "T" })
     }
 
     fun testAdjacentEmbedsShareOneFrame() {

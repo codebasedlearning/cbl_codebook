@@ -4,24 +4,12 @@
     <vendor email="info@codebasedlearning.dev" url="https://www.codebasedlearning.dev">codebasedlearning</vendor>
 
     <description><![CDATA[
-        Turns the prose in your comments into a readable book: a clickable topic
-        outline, layered follow-caret notes with Markdown rendering, and
-        Run/Debug buttons - while the comments themselves fold away in the
-        editor, so the code stays readable and the explanation stays available.
+        A JetBrains IDE plugin (CLion, PyCharm, IntelliJ IDEA) for
+        code-based-learning courses: it turns didactic comments in course snippets
+        into a structured side panel — and folds them away in the editor, so the
+        code stays readable while the prose stays available.
         <br/><br/>
-        A topic is a block comment whose first line is a dash-framed title -
-        <code>---- topic ----</code>, <code>--- child ---</code>,
-        <code>-- detail --</code>, <code>- aside -</code> for the four levels.
-        Markers are ordinary comments: they never break compilation and degrade
-        gracefully in editors that know nothing about them.
-        Supports block references and embeds between annotations
-        (<code>[text](#topic)</code>, <code>![](#topic)</code>), cross-file
-        references into other snippets or a Markdown glossary
-        (<code>dictionary.md#term</code> - headings are the blocks there),
-        output-section linking from source to the Run console, and per-course
-        configuration via <code>cbl.properties</code>. Works in any JetBrains
-        IDE - the parser is PSI-comment based and language-agnostic
-        (C++, Python, Java, Kotlin, ...).
+        See README for details.
         <br/><br/>
         Built for the code-based-learning courses at
         <a href="https://www.codebasedlearning.dev">codebasedlearning.dev</a>.
@@ -31,6 +19,26 @@
          release checklist in DEVELOPMENT.md. Rendering these from the changelog
          automatically was tried and reverted; the comment in build.gradle.kts
          has the reason. -->
+
+    <change-notes><![CDATA[
+        <b>1.0.4</b>
+        <ul>
+            <li>common indent removed, no outline jump after run, and more</li>
+        </ul>
+    ]]></change-notes>
+
+    <change-notes><![CDATA[
+        <b>1.0.3</b>
+        <ul>
+            <li>Unlisted mode added</li>
+        </ul>
+    ]]></change-notes>
+    <change-notes><![CDATA[
+        <b>1.0.2</b>
+        <ul>
+            <li>Screenshots added, Readme explained</li>
+        </ul>
+    ]]></change-notes>
     <change-notes><![CDATA[
         <b>1.0.1 — first public release</b>
         <ul>

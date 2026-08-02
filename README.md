@@ -105,6 +105,19 @@ sit on the opening line, so a Javadoc-style opening works too:
    This snippet discusses `static` member functions … */
 ```
 
+A title starting with a **dot** marks the block as *unlisted*: it appears
+neither in the outline nor in the breadcrumb — the two places that tell a reader
+where they are — while everything else about it stays the same: notes, folding,
+and refs (the dot is a marker, not part of the title, so `.Setup helpers` is
+still addressed as `[#setup-helpers]`). Its notes still stack under the caret,
+and since no crumb names it, they are headed by its own title instead. Use it for scaffolding a file needs but a
+reader should not have to walk past. Children of an unlisted block are listed as
+usual.
+
+```cpp
+/* ---- .Setup helpers ---- includes and boilerplate, not a topic of its own */
+```
+
 ### What is *not* a block
 
 Deliberately narrow, so the DSL collides with nothing you already write:
@@ -147,6 +160,22 @@ Images work via `![alt](img/sketch.png)`, resolved relative to the folder of the
 source file. Lists use `-`: a leading `* ` is stripped as boxed-comment
 decoration, while `*`/`**` emphasis survives.
 
+**Indentation is relative.** The body's common indent is removed — a comment
+nested ten columns deep in a method reads like a document that starts at the
+left margin — and anything indented *further* keeps the difference, so sub-lists
+nest as they do anywhere else:
+
+```cpp
+/* ---- Two core design principles ----
+   - 'zero overhead': you only pay for what you use
+     - virtual only where you ask for it
+   - 'const correctness': `const` unless observable state changes */
+```
+
+Two Markdown rules are easy to trip over here, both inherited, neither ours:
+changing the bullet character (`-` → `+`) starts a *new* list, and a blank line
+inside a list makes it loose (paragraph gaps around every item).
+
 ## References and embeds
 
 Two forms, straight from Markdown, addressing other blocks by their title slug
@@ -179,13 +208,42 @@ dominates in practice:
 
 ```
 [#main-guard]      reference; the link text is the target's title
-![#main-guard]     embed
+![#main-guard]     embed, folded until clicked
+!![#main-guard]    embed, pinned open
 ![../notes.md#tco] an explicit path still works
 ```
+
+The second `!` says *include this*, not *offer this*: same frame and headline,
+but no arrow and nothing to click — a transclusion of text that belongs here and
+is merely kept in one place, as opposed to a question the reader unfolds when
+they are ready. The fold state is not consulted at all, so Fold-all leaves it
+alone.
 
 A path-less fragment is looked up along `glossary.path` (see below), in order,
 the current file last. Both forms are valid CommonMark shortcut references, so
 a foreign renderer prints the literal text instead of mangling it.
+
+**Labels** — a block can declare its own address, as a trailing anchor in the
+header:
+
+```
+## Background Const                     <a id="acdf"></a>
+```
+
+An ordinary HTML anchor, nothing invented: every Markdown renderer passes it
+through and shows *nothing*, so headings stay clean in exports and on GitHub —
+where it is a real anchor as well (`#user-content-acdf`). It can be tabbed far
+to the right, out of the way of the prose. `name=` is accepted alongside `id=`,
+and the closing tag may be omitted (`<a id="acdf">`) — though only the closed
+form is valid HTML5, so write it closed for anything that leaves the IDE.
+
+`[#acdf]` now addresses that block, and the title slug (`background-const`) no
+longer does — the label *replaces* it, so rewording the heading cannot silently
+break or re-point a ref. The label is stripped from the title, so everything
+that shows a title shows the front part alone: the outline, the breadcrumb, the
+embed frame, and the link text of `[#acdf]`, which renders as
+[Background Const]. Headers without a `[#label]` keep addressing by title slug,
+exactly as before.
 
 ### Question blocks
 
@@ -198,8 +256,26 @@ one-liner whose body is a folded embed.
 
 Embeds render **folded** by default, so the answer is one click away and,
 unlike a marker inside the snippet, genuinely not in the student's file. Name
-the answer sections neutrally (`## Answer 0x02-3`) — a folded embed shows its
-target's title, so `## Because m is const` would spoil itself.
+the answer sections neutrally (`## Answer 0x02-3`) — a folded embed on a line
+of its own shows its target's title, so `## Because m is const` would spoil
+itself.
+
+**Inline embeds:** an embed with text in front of it on the same line stays
+*in* that line — it renders as the target's headline followed by a `▸`, right
+where it stands, with no frame and no line break:
+
+```
+What prints `cout << v1`? ![#answer-init-value]
+```
+
+Clicking flips the arrow to `▾` and shows the body in the usual frame directly
+below the paragraph (block content cannot live inside a sentence); the frame
+carries no headline of its own, since it already stands in the sentence above.
+Position is the only difference between the two forms; there is no extra syntax.
+
+Which means the headline is what a reader sees before deciding to unfold — so
+it must not answer the question by itself. Either keep answers neutrally named
+(`## Answer 0x02-3`) or let the headline repeat the question.
 
 ## The tool window
 
