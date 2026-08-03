@@ -147,7 +147,19 @@ The convention differs per language, on purpose:
 
 Both behave identically in the panel: a block whose comment opens a construct
 (the line above ends with `:` or `{`) owns that opening line, so putting the
-caret on a signature selects the block that documents it.
+caret on a signature selects the block that documents it — **unless a CBL
+comment stands directly above that line**, in which case the line belongs to it:
+
+```cpp
+/* --- namespace --- */
+namespace {
+    /* --- `define_and_init` --- */
+    void define_and_init() {
+```
+
+The caret on `namespace {` selects *namespace*, the caret on the function
+signature selects *define_and_init*. Without the exception the inner block would
+swallow the very line the outer comment was written for.
 
 ## Notes are Markdown
 
@@ -197,8 +209,16 @@ references resolve to the first title match in file order.
 ![](../doc/glossary.md#tail-call-optimization)
 ```
 
-Clicking opens the file at that block; an embed splices its text in (relative
-images are rebased to the foreign folder). Code files are read through the
+An embed splices the target's text in (relative images are rebased to the
+foreign folder, and so are the links: a `[text](#other)` inside an embedded
+glossary entry means *that* glossary's `#other`).
+
+**Clicking** a ref into a Markdown file does not open that file — it shows the
+section in a **peek** frame below the notes, so a lookup costs neither a tab nor
+your place in the snippet. The same link closes it again, a link inside the peek
+replaces its content, and the ⚐ in the peek header opens the file in the editor
+when you really do want to go there. Refs into *code* files navigate as before:
+Markdown is reading material, code is where you work. Code files are read through the
 parser; **Markdown files have no comments, so ATX headings are the blocks
 there** — `## Code Style`, depth = heading level. Slugs equal GitHub's anchors,
 so the same links work when reading the repository online.

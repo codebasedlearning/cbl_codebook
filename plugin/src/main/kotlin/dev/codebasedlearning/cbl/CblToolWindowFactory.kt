@@ -81,6 +81,10 @@ private const val LIST_MARGIN = BULLET_INSET + 10
  */
 private const val ITEM_GAP = 4
 
+/** Extensions the panel treats as reading material - looked up in the peek
+ *  frame rather than opened in the editor (see `CblPanel.togglePeek`). */
+private val markdownExtensions = setOf("md", "markdown")
+
 class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private val service = project.service<CblService>()
@@ -107,6 +111,22 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     /** Last rendered block, for re-rendering after an embed toggle. */
     private var currentDetail: CblBlock? = null
+
+    /**
+     * The peeked block, shown in a frame BELOW the notes, and the ref that
+     * opened it. Clicking a Markdown link no longer opens that file in the
+     * editor - a lookup is not navigation, and reading one definition should
+     * not cost a tab and the place you were reading. Clicking the same link
+     * again closes the peek (the link is the toggle, which is why the frame
+     * needs no close button); clicking a link INSIDE the peek replaces its
+     * content, because that click carries a different ref.
+     *
+     * One slot, no history: a chain deep enough to want a back button has not
+     * happened yet, and the stack can be added here without touching anything
+     * else. Code refs are unaffected - see [openLink].
+     */
+    private var peek: CblMarkdown.Resolved? = null
+    private var peekRef: String? = null
 
     /**
      * Title of the block the panel currently shows - the selection's identity
@@ -147,7 +167,12 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
         splitter = JBSplitter(true, 0.3f).apply {
             firstComponent = upperPanel
-            secondComponent = JBScrollPane(notesPane)
+            // the vertical bar is ALWAYS there: appearing on demand takes ~14px
+            // off the width, and every paragraph in the pane re-wraps when it
+            // does - a peek opening must not reformat the text above it
+            secondComponent = JBScrollPane(notesPane).apply {
+                verticalScrollBarPolicy = javax.swing.ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS
+            }
             addComponentListener(object : ComponentAdapter() {
                 override fun componentResized(e: ComponentEvent) = adjustSplitter()
             })
@@ -273,6 +298,10 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
      * renders the topic section only.
      */
     private fun showBlock(detail: CblBlock, preserveScroll: Boolean = false) {
+        // a lookup belongs to the block it was looked up from: moving on closes
+        // it. Compared by title, not by identity - a re-parse hands out new
+        // block objects for the same file, and typing must not close the peek.
+        if (detail.title != currentDetail?.title) closePeek()
         currentDetail = detail
         selectedTitle = detail.title
         val chain = service.model?.chainOf(detail) ?: emptyList()
@@ -313,6 +342,23 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
             else html.append("<div class='detail'>").append(section).append("</div>")
             first = false
         }
+        // the looked-up block, last and framed: borrowed text, visibly not part
+        // of this file's notes. Its header says where it came from and offers
+        // the editor as an explicit choice rather than as the default.
+        peek?.let { target ->
+            // header as a two-cell table: Swing has no float, and a table is the
+            // only construct its HTML engine right-aligns reliably
+            html.append("<div class='peek'>")
+                .append("<table class='peekbar' width='100%'><tr><td class='peekwhere'>")
+                .append("<a href='${CblMarkdown.OPEN_SCHEME}${peekRef}'>&#9873;</a> ")
+                .append(escape(target.path ?: "")).append(" &#9656; ")
+                .append(inlineTitle(target.block))
+                .append("</td><td class='peekclose' align='right'>")
+                .append("<a href='${CblMarkdown.CLOSE_SCHEME}'>&#10005;</a>")
+                .append("</td></tr></table>")
+                .append(renderForeignBody(target))
+                .append("</div>")
+        }
         html.append("</body></html>")
         applyImageBase()
         // embed toggles re-render in place - keep the scroll position then,
@@ -343,7 +389,58 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
             body,
             expanded = { ref -> ref in expandedEmbeds },
         ) { ref -> resolveRefTarget(ref) }
-        return rewriteImageSrc(CblMarkdown.toHtml(md))
+        return rewriteImageSrc(CblMarkdown.softenCodeBlocks(CblMarkdown.toHtml(md)))
+    }
+
+    /**
+     * Body of a PEEKED block. Same pipeline as [renderBody], minus the short-ref
+     * expansion (that one resolves against the current file's glossary path, not
+     * against the peeked file's) and plus the foreign rebasing, so links inside
+     * the lookup point at the file that wrote them.
+     */
+    private fun renderForeignBody(target: CblMarkdown.Resolved): String {
+        val md = CblMarkdown.resolveEmbeds(
+            target.block.bodyLines.joinToString("\n"),
+            expanded = { ref -> ref in expandedEmbeds },
+        ) { ref -> resolveRefTarget(ref) }
+        return rewriteImageSrc(
+            CblMarkdown.softenCodeBlocks(CblMarkdown.toHtml(CblMarkdown.rebaseForeign(md, target)))
+        )
+    }
+
+    private fun closePeek() {
+        peek = null
+        peekRef = null
+    }
+
+    /**
+     * Show [target] in the peek frame, or close it if the same ref is clicked
+     * again - the link that opened the lookup is the one that dismisses it.
+     * Returns false when the destination is not a peekable one, in which case
+     * [openLink] falls back to opening the file.
+     */
+    private fun togglePeek(target: String): Boolean {
+        val hash = target.indexOf('#')
+        if (hash <= 0) return false                     // same-file refs keep their behaviour
+        if (peekRef == target) {
+            closePeek()
+            currentDetail?.let { showBlock(it, preserveScroll = true) }
+            return true
+        }
+        val dir = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.parent ?: return false
+        val path = target.substring(0, hash)
+        val file = dir.findFileByRelativePath(path) ?: return false
+        // Markdown is reading material and is peeked; code is where the reader
+        // works, so a code ref still takes the editor there
+        if (file.extension?.lowercase() !in markdownExtensions) return false
+        val block = foreignModel(file)?.blockByRef(target.substring(hash + 1)) ?: return false
+        peek = CblMarkdown.Resolved(block, java.io.File(file.parent.path), path)
+        peekRef = target
+        currentDetail?.let { showBlock(it, preserveScroll = true) }
+        // the frame is appended at the bottom, so scroll there - a lookup that
+        // lands below the fold looks like a click that did nothing
+        SwingUtilities.invokeLater { notesPane.caretPosition = notesPane.document.length }
+        return true
     }
 
     private fun iconButton(icon: javax.swing.Icon, tip: String, action: () -> Unit) =
@@ -532,9 +629,13 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
             return service.model?.blockByRef(fragment)?.let { CblMarkdown.Resolved(it) }
         }
         val dir = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.parent ?: return null
-        val file = dir.findFileByRelativePath(ref.substring(0, hash)) ?: return null
+        val path = ref.substring(0, hash)
+        val file = dir.findFileByRelativePath(path) ?: return null
         val block = foreignModel(file)?.blockByRef(fragment) ?: return null
-        return CblMarkdown.Resolved(block, java.io.File(file.parent.path))
+        // the path as WRITTEN travels with the target: links inside the
+        // embedded body are rewritten against it, so a click lands in the file
+        // that meant them (see CblMarkdown.rebaseLinks)
+        return CblMarkdown.Resolved(block, java.io.File(file.parent.path), path)
     }
 
     /**
@@ -565,6 +666,16 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
             currentDetail?.let { showBlock(it, preserveScroll = true) }
             return
         }
+        if (target.startsWith(CblMarkdown.CLOSE_SCHEME)) {
+            closePeek()
+            currentDetail?.let { showBlock(it, preserveScroll = true) }
+            return
+        }
+        if (target.startsWith(CblMarkdown.OPEN_SCHEME)) {
+            // the peek header's explicit "take me there"
+            openInEditor(target.removePrefix(CblMarkdown.OPEN_SCHEME))
+            return
+        }
         if (target.startsWith("#")) {
             val block = service.model?.blockByRef(target.removePrefix("#")) ?: return
             tocList.setSelectedValue(block, true)
@@ -576,13 +687,10 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
         val hash = target.indexOf('#')
         if (hash > 0) {
-            // cross-file reference: open the file and navigate to the block
-            // (falls back to the file start if the fragment does not resolve)
-            val dir = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.parent ?: return
-            val file = dir.findFileByRelativePath(target.substring(0, hash)) ?: return
-            val block = foreignModel(file)?.blockByRef(target.substring(hash + 1))
-            com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file, block?.startOffset ?: 0)
-                .navigate(true)
+            // Markdown: look it up in the peek, right here. Code, or anything
+            // that does not resolve: open the file at the block, as before.
+            if (togglePeek(target)) return
+            openInEditor(target)
             return
         }
         val dir = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.parent ?: return
@@ -592,6 +700,18 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
                 com.intellij.openapi.fileEditor.OpenFileDescriptor(project, it).navigate(true)
             }
         }
+    }
+
+    /** Open `path#fragment` in the editor, at the block if the fragment
+     *  resolves, at the file start otherwise. */
+    private fun openInEditor(target: String) {
+        val hash = target.indexOf('#')
+        if (hash <= 0) return
+        val dir = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.parent ?: return
+        val file = dir.findFileByRelativePath(target.substring(0, hash)) ?: return
+        val block = foreignModel(file)?.blockByRef(target.substring(hash + 1))
+        com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file, block?.startOffset ?: 0)
+            .navigate(true)
     }
 
     /** Fallback base for anything the rewrite left relative. */
@@ -623,6 +743,19 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
                     // embedded blocks: framed by the same thin gray lines
                     it.addRule("div.embed { margin-top: 8px; padding-bottom: 8px; " +
                         "border-top: 1px solid #$hex; border-bottom: 1px solid #$hex; }")
+                    // the peek frame: borrowed text, so a heavier top rule than
+                    // an embed and a gray provenance line above it
+                    it.addRule("div.peek { margin-top: 12px; padding-bottom: 8px; " +
+                        "border-top: 2px solid #$hex; }")
+                    it.addRule("p.peekhead { margin-top: 6px; margin-bottom: 2px; color: #$hex; }")
+                    // the peek's header bar - a table only because Swing cannot
+                    // right-align anything else; no cell padding, no rules
+                    it.addRule("table.peekbar { margin-top: 4px; }")
+                    it.addRule("td.peekwhere { padding: 0px; color: #$hex; }")
+                    it.addRule("td.peekclose { padding: 0px; text-align: right; }")
+                    // code blocks: monospace, but wrapping - see
+                    // CblMarkdown.softenCodeBlocks for why they are not <pre>
+                    it.addRule("div.code { font-family: Monospaced; margin-top: 8px; }")
                     /*
                      * Lists: the 8px rhythm AROUND a list, none INSIDE it.
                      * Swing's default.css says `ul { margin-top: 10;

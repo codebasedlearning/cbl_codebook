@@ -15,41 +15,9 @@
         <a href="https://www.codebasedlearning.dev">codebasedlearning.dev</a>.
     ]]></description>
 
-    <!-- Keep in step with the newest section of CHANGELOG.md by hand - see the
-         release checklist in DEVELOPMENT.md. Rendering these from the changelog
-         automatically was tried and reverted; the comment in build.gradle.kts
-         has the reason. -->
-
-    <change-notes><![CDATA[
-        <b>1.0.4</b>
-        <ul>
-            <li>common indent removed, no outline jump after run, and more</li>
-        </ul>
-    ]]></change-notes>
-
-    <change-notes><![CDATA[
-        <b>1.0.3</b>
-        <ul>
-            <li>Unlisted mode added</li>
-        </ul>
-    ]]></change-notes>
-    <change-notes><![CDATA[
-        <b>1.0.2</b>
-        <ul>
-            <li>Screenshots added, Readme explained</li>
-        </ul>
-    ]]></change-notes>
-    <change-notes><![CDATA[
-        <b>1.0.1 — first public release</b>
-        <ul>
-            <li>Topic outline of a file's dash-framed block comments, with layered notes that follow the caret.</li>
-            <li>Markdown rendering (GitHub-flavoured, tables included), images, and links between topics.</li>
-            <li>Short glossary references: <code>[#term]</code> links and <code>![#term]</code> embeds, resolved along a configurable search path.</li>
-            <li>Editor folding of the note body, leaving the title line visible; fold and unfold act on the topic comments only.</li>
-            <li>Run and Debug from the panel; gutter icons link printed output sections back to their source line.</li>
-            <li>Per-course configuration via cascading <code>cbl.properties</code>.</li>
-        </ul>
-    ]]></change-notes>
+    <!-- No <change-notes> here on purpose: it is GENERATED from CHANGELOG.md
+         by the org.jetbrains.changelog Gradle plugin (see build.gradle.kts).
+         One source of truth; the patched file lands in build/patchedPluginXml/. -->
 
     <!-- Works in CLion, PyCharm, IntelliJ IDEA, ... - no language-specific API. -->
     <depends>com.intellij.modules.platform</depends>

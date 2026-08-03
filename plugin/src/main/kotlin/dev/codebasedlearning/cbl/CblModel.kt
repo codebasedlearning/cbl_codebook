@@ -254,7 +254,8 @@ object CblParser {
             if (!isStandalone(text, range.startOffset)) continue // ordinary comment
             val header = matchHeader(interiorLines(comment.text), patterns) ?: continue
             val block = CblBlock(range)
-            block.startOffset = extentStart(text, range.startOffset)
+            block.startOffset =
+                extentStart(text, range.startOffset, blocks.lastOrNull()?.headerRange?.endOffset)
             block.depth = header.depth
             block.title = header.title
             block.isUnlisted = header.unlisted
@@ -468,11 +469,23 @@ object CblParser {
      *
      * The construct's opening line is therefore folded into the block when the
      * previous non-blank line ends with `:` or `{` - language-agnostic, since
-     * every language the DSL targets opens a body that way. Consequence worth
-     * knowing: the first block inside a class or function owns that header line,
-     * whichever of the two forms is used.
+     * every language the DSL targets opens a body that way.
+     *
+     * UNLESS that opening line already has an owner: if a CBL comment sits
+     * directly above it, with nothing but whitespace in between, then THAT
+     * comment documents the construct and keeps it. Otherwise
+     *
+     *     ... --- namespace --- ...
+     *     namespace {
+     *         ... --- define_and_init --- ...
+     *         void define_and_init() {
+     *
+     * would hand `namespace {` to the inner block, and a caret on the line the
+     * namespace comment was written for would select the function below it.
+     * [previousCommentEnd] is the end of the preceding CBL comment, or null if
+     * this is the first block in the file.
      */
-    private fun extentStart(text: String, commentStart: Int): Int {
+    private fun extentStart(text: String, commentStart: Int, previousCommentEnd: Int?): Int {
         var lineStart = commentStart
         while (lineStart > 0 && text[lineStart - 1] != '\n') lineStart--
         var cursor = lineStart - 1 // the newline ending the previous line, or -1
@@ -485,7 +498,13 @@ object CblParser {
                 cursor = previousStart - 1
                 continue
             }
-            return if (text[last] == ':' || text[last] == '{') previousStart else commentStart
+            if (text[last] != ':' && text[last] != '{') return commentStart
+            // the opening line is claimed by the CBL comment directly above it,
+            // if there is one - nothing but whitespace may stand between them
+            val claimed = previousCommentEnd != null &&
+                previousCommentEnd <= previousStart &&
+                (previousCommentEnd until previousStart).all { text[it].isWhitespace() }
+            return if (claimed) commentStart else previousStart
         }
         return commentStart
     }

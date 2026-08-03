@@ -1,3 +1,4 @@
+import org.jetbrains.changelog.Changelog
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginSignatureTask
@@ -7,13 +8,26 @@ plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.4.0"
     id("org.jetbrains.intellij.platform") version "2.18.1"
+    id("org.jetbrains.changelog") version "2.5.0" // feed plugin.xml automatically
 }
 
 group = "dev.codebasedlearning"
-version = "1.0.4"
+version = "1.0.7"
 
 base {
     archivesName = "codebook"
+}
+
+/*
+ * The changelog lives at the REPOSITORY root, one level above this build file,
+ * so the path has to be given; the plugin would otherwise look next to it.
+ * `patchChangelog` promotes [Unreleased] to the current version and stamps the
+ * date - run it at release time, before tagging.
+ */
+changelog {
+    path = rootProject.file("CHANGELOG.md").canonicalPath
+    header = provider { "[${project.version}] - ${org.jetbrains.changelog.date()}" }
+    groups = emptyList()        // flat item lists, no Added/Fixed subsections
 }
 
 repositories {
@@ -26,8 +40,6 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdea("2026.1.4")
-        // Java language support for tests: the parser tests use .java fixtures,
-        // and the bare platform test framework has no Java PSI.
         bundledPlugin("com.intellij.java")
         bundledPlugin("org.intellij.plugins.markdown")
         testFramework(TestFrameworkType.Platform)
@@ -52,6 +64,25 @@ intellijPlatform {
             sinceBuild = "261"
             // No upper bound: newer IDEs may load the plugin.
             untilBuild = provider { null }
+        }
+
+        /*
+         * <change-notes> is GENERATED from CHANGELOG.md - one source, no drift,
+         * and the version in this file is what selects the section. The
+         * section for `version` if it exists, otherwise the newest one, so a
+         * build during development still produces something readable.
+         *
+         * Consequence worth knowing: plugin.xml carries no change-notes of its
+         * own any more. Read the patched one in build/patchedPluginXml/ if you
+         * want to see what the Marketplace will show.
+         */
+        changeNotes = provider {
+            with(changelog) {
+                renderItem(
+                    getOrNull(project.version.toString()) ?: getLatest(),
+                    Changelog.OutputType.HTML,
+                )
+            }
         }
     }
 

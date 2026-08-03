@@ -211,6 +211,7 @@ export PRIVATE_KEY="$(cat private.pem)"
 export PRIVATE_KEY_PASSWORD='…'
 ./gradlew :plugin:signPlugin
 ./gradlew :plugin:verifyPluginSignature
+git push origin <name> 
 ```
 
 `signPlugin` runs automatically before `publishPlugin` and is **skipped** when
@@ -236,16 +237,15 @@ The version number is written in exactly **one** place: `version` in
 `plugin/build.gradle.kts`. `patchPluginXml` fills `<version>` and
 `<idea-version>` from it, so plugin.xml declares neither — keep it that way.
 
-The release **note** is the one thing written twice: the newest section of
-CHANGELOG.md and `<change-notes>` in plugin.xml. Deriving the second from the
-first was tried with the Gradle Changelog Plugin and reverted (the reason is in
-`plugin/build.gradle.kts`); one paste per release is cheaper than the machinery.
+The release **note** is written once, in CHANGELOG.md: the Gradle Changelog
+Plugin renders the section matching `version` into `<change-notes>` at build
+time, so plugin.xml carries none of its own. To see what the Marketplace will
+show, read `plugin/build/patchedPluginXml/plugin.xml` after a build.
 
 ```bash
 ./gradlew :plugin:clean
 # 1. bump `version` in plugin/build.gradle.kts — semver, the Marketplace enforces it
-# 2. add a '## [x.y.z] - <date>' section to CHANGELOG.md
-# 3. copy those bullets into <change-notes> in plugin.xml, as HTML <li> items
+# 2. ./gradlew :plugin:patchChangelog — promotes [Unreleased] to that version, with today's date
 ./gradlew :plugin:test
 ./gradlew :plugin:buildPlugin           # → codebook-x.y.z.zip
 ./gradlew :plugin:verifyPlugin          # Compatible, and no INTERNAL_API_USAGES

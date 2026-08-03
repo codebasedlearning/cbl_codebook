@@ -271,7 +271,9 @@ class CblRefsTest : TestCase() {
         val pinned = CblMarkdown.resolveEmbeds(
             "!![](#code-style)", expanded = { false }, resolve = resolver(m)
         )
-        assertEquals("still framed", 1, frameCount(pinned))
+        // no frame: a frame marks text the reader let in, and pinned text was
+        // written here - only its headline says where it is kept
+        assertEquals("not framed", 0, frameCount(pinned))
         assertTrue("headline stays", "**Code Style**" in pinned)
         assertTrue("body is spliced despite the fold state", "use spaces, not tabs" in pinned)
         assertFalse("no toggle link", CblMarkdown.TOGGLE_SCHEME in pinned)
@@ -286,6 +288,16 @@ class CblRefsTest : TestCase() {
         assertTrue("here: Code Style" in inline)
         assertFalse(CblMarkdown.TOGGLE_SCHEME in inline)
         assertTrue("use spaces, not tabs" in inline)
+        assertEquals("nor framed inline", 0, frameCount(inline))
+        // ... and the following Markdown still renders, i.e. the paragraph the
+        // sentence started is properly closed
+        assertTrue(
+            "<strong>bold</strong>" in CblMarkdown.toHtml(
+                CblMarkdown.resolveEmbeds(
+                    "here: !![](#code-style)\nafter **bold**\n", resolve = resolver(m)
+                )
+            )
+        )
 
         // and the short form carries the second bang through
         assertEquals("!![](dictionary.md#tco)", CblMarkdown.expandShortcuts("!![#tco]", listOf("dictionary.md")) { "T" })
@@ -376,6 +388,36 @@ class CblRefsTest : TestCase() {
         assertEquals("... after a line break, too", "text\n[#decorator]: dest", expand("text\n[#decorator]: dest"))
     }
 
+    /**
+     * Code blocks must not be `<pre>`: Swing lays one out on a single line, and
+     * a view that cannot fit its content stops tracking the viewport - so one
+     * 90-column line of C++ widens the whole pane and re-flows every paragraph
+     * around it. Exactly what "the text above reformats when I open a peek"
+     * turned out to be.
+     */
+    fun testCodeBlocksWrapInsteadOfWidening() {
+        val html = CblMarkdown.softenCodeBlocks(
+            CblMarkdown.toHtml(
+                """
+                See:
+
+                ```cpp
+                namespace { void define_and_init() { } }   // helper
+                    int indented{0};
+                ```
+
+                after
+                """.trimIndent()
+            )
+        )
+        assertFalse("no <pre> may survive", "<pre>" in html)
+        assertTrue("<div class='code'>" in html)
+        assertTrue("lines are kept apart", "<br>" in html)
+        assertTrue("indentation survives as nbsp", "&nbsp;&nbsp;&nbsp;&nbsp;int" in html)
+        // the prose around it is untouched
+        assertTrue("<p>See:</p>" in html && "<p>after</p>" in html)
+    }
+
     fun testGfmTablesRender() {
         // guards the flavour choice: plain CommonMark has no table syntax, so a
         // comparison table - a teaching staple - would degrade into a paragraph
@@ -428,6 +470,46 @@ class CblRefsTest : TestCase() {
         // heading slugs resolve like any block, qualified included
         assertSame(m.blocks[1], m.blockByRef("code-style"))
         assertSame(m.blocks[2], m.blockByRef("glossary:tail-calls"))
+    }
+
+    /**
+     * A glossary entry that links to another entry means "another entry of the
+     * GLOSSARY" - but the notes pane renders it inside a snippet, where a bare
+     * fragment resolves against the snippet's own blocks and finds nothing. The
+     * click then did nothing at all, the least helpful failure a link has. So
+     * the foreign path travels with the embed and is written back into every
+     * relative destination in the body.
+     */
+    fun testCrossFileEmbedRebasesLinks() {
+        val foreign = CblParser.parseMarkdown(
+            """
+            # Dict
+
+            ## RAII
+
+            See [const correctness](#const-correctness), the [notes](notes/more.md)
+            and the [guidelines](https://isocpp.github.io/).
+
+            ## Const correctness
+
+            body
+            """.trimIndent()
+        )
+        val resolved = CblMarkdown.resolveEmbeds("![](doc/glossary.md#raii)") { ref ->
+            foreign.blockByRef(ref.substringAfter('#'))
+                ?.let { CblMarkdown.Resolved(it, java.io.File("/course/doc"), "doc/glossary.md") }
+        }
+        assertTrue(
+            "a fragment becomes a cross-file ref into the glossary",
+            "[const correctness](doc/glossary.md#const-correctness)" in resolved
+        )
+        assertTrue(
+            "a relative path is rebased to the glossary's folder",
+            "[notes](doc/notes/more.md)" in resolved
+        )
+        assertTrue("web links are left alone", "(https://isocpp.github.io/)" in resolved)
+        // the toggle link the embed itself generates must not be rewritten
+        assertTrue("${CblMarkdown.TOGGLE_SCHEME}doc/glossary.md#raii)" in resolved)
     }
 
     fun testCrossFileEmbedRebasesImages() {

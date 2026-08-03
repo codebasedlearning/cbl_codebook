@@ -314,38 +314,53 @@ class CblParserTest : BasePlatformTestCase() {
         assertEquals(listOf("Glossary"), model.listedBlocks.map { it.title })
     }
 
-    fun testBlockOpeningAConstructOwnsItsHeaderLine() {
+    /**
+     * Who owns the line that OPENS a construct - `class Demo {`, `def f():`,
+     * `namespace {`? The block inside it, so that a caret on a signature selects
+     * the block documenting it (the Python docstring position) - UNLESS a CBL
+     * comment stands directly above that line, in which case the line is what
+     * that comment was written for and it keeps it.
+     */
+    fun testWhoOwnsTheLineThatOpensAConstruct() {
         val file = myFixture.configureByText(
             "Demo.java",
             """
             /* ---- Above the class ---- */
             class Demo {
                 /* ---- Inside the body ----
-                   this is the Python docstring position, in Java syntax */
+                   documented from above: the class line is already spoken for */
                 void f() {}
+
+                void g() {
+                    /* ---- Inside g ----
+                       the docstring position: nothing above claims 'void g() {' */
+                    int m = 0;
+                }
             }
             """.trimIndent()
         )
         val model = CblParser.parse(file)
-        assertEquals(2, model.blocks.size)
+        assertEquals(3, model.blocks.size)
         val document = myFixture.editor.document
+        val (outer, inner, inG) = Triple(model.blocks[0], model.blocks[1], model.blocks[2])
 
-        // the inner block starts at 'class Demo {', not at its own comment, so
-        // the caret on a signature selects the block that documents it
-        val inner = model.blocks[1]
-        assertEquals(1, document.getLineNumber(inner.startOffset))
-        assertEquals(2, document.getLineNumber(inner.headerRange.startOffset))
-        assertSame(inner, model.blockAt(document.getLineStartOffset(1)))
-        // folding is unaffected - it works on the comment, not on the extent
-        assertEquals(2, document.getLineNumber(inner.foldStart))
-
-        // a block that follows ordinary code keeps its own start
-        val outer = model.blocks[0]
+        // 'class Demo {' belongs to the comment ABOVE it, not to the one below
         assertEquals(outer.headerRange.startOffset, outer.startOffset)
-        // ... and a block reaches to just before the next one, so every offset in
-        // the file belongs to exactly one block (this drives the breadcrumb)
+        assertSame(outer, model.blockAt(document.getLineStartOffset(1)))
+        assertEquals("the inner block keeps its own start", 2, document.getLineNumber(inner.startOffset))
+
+        // ... while a block whose construct line has no comment above it takes
+        // that line, so the caret on 'void g() {' selects what documents it
+        assertEquals(6, document.getLineNumber(inG.startOffset))
+        assertEquals(7, document.getLineNumber(inG.headerRange.startOffset))
+        assertSame(inG, model.blockAt(document.getLineStartOffset(6)))
+        // folding is unaffected - it works on the comment, not on the extent
+        assertEquals(7, document.getLineNumber(inG.foldStart))
+
+        // a block reaches to just before the next one, so every offset in the
+        // file belongs to exactly one block (this drives the breadcrumb)
         assertEquals(inner.startOffset - 1, outer.endOffset)
         assertSame(outer, model.blockAt(outer.startOffset + 3))
-        assertSame(inner, model.blockAt(file.textLength - 1))
+        assertSame(inG, model.blockAt(file.textLength - 1))
     }
 }
