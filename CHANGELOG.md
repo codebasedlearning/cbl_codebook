@@ -11,6 +11,10 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-08-05
+
+- Ordinary links navigate again, fragment or not; the foldable form moved to `!![#term]`. So: `[…]` links, `![…]` shows, `!![…]` offers.
+
 ## [1.0.14] - 2026-08-05
 
 - Editing a line no longer shows a neighbouring block's notes: the caret is ignored while the model is older than the document, and the panel catches up when the re-parse lands.
@@ -22,10 +26,10 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [1.0.11] - 2026-08-04
 
-- Two ref forms instead of three: `[#term]` is a link that unfolds the target in place (headline + ▸, click again to close), `![#term]` shows it always. `!!` is gone, and so is the peek pane.
-- A link inside an open block replaces that block instead of nesting another one under it; ⚐ opens the source in the editor, ✕ closes the block.
-- Every link occurrence has its own state, so two refs to the same term no longer toggle together.
-- Embedded and peeked sections are indented by the same step the outline uses, so borrowed text reads as borrowed.
+- Three ref forms, one per intention: `[#term]` navigates as a link always did, `![#term]` shows the target's text, `!![#term]` folds it behind a ▸ until the reader clicks. The peek pane is gone.
+- A fold inside an open block replaces that block instead of nesting another one under it; ⚐ opens the source in the editor, ✕ closes the block.
+- Every fold occurrence has its own state, so two refs to the same term no longer toggle together.
+- Embedded and opened sections are indented by the same step the outline uses, so borrowed text reads as borrowed.
 
 ## [1.0.8] - 2026-08-03
 

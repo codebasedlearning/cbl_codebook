@@ -80,23 +80,27 @@ object CblMarkdown {
     )
 
     /**
-     * The two ref forms, and the whole difference between them:
+     * The three ref forms, one per intention:
      *
-     *  - `[text](path#ref)` - a LINK: the target's headline plus a small '\u25b8'.
-     *    Nothing is shown until the reader clicks it, and clicking again hides
-     *    it. This is what a question, a glossary word, a "see also" is.
-     *  - `![text](path#ref)` - an EMBED: the target's text, always there. This
-     *    is what a passage the author wrote here but keeps elsewhere is.
+     *  - `[text](path#ref)` - a LINK, and nothing more than one: clicking it
+     *    opens the file, at the block if the fragment names one. Markdown's own
+     *    meaning, kept, so a reader who knows links is never surprised.
+     *  - `![text](path#ref)` - an EMBED: the target's text, always there. The
+     *    image form, transclusion instead of navigation - again Markdown's own
+     *    meaning, one step further.
+     *  - `!![text](path#ref)` - a FOLD: the headline plus a small arrow, and
+     *    the text only when the reader asks for it.
      *
-     * Brackets mean "on demand", the bang means "shown" - one axis, no third
-     * form. Both are ordinary Markdown, so a foreign renderer degrades them to
-     * a link and to a broken image respectively, never to junk.
+     * So `!` shows and `!!` offers, while a bare link navigates. The two banged
+     * forms are the ones this plugin invents, and both degrade in a foreign
+     * renderer to something harmless - a broken image, and a literal `!` in
+     * front of a link.
      *
      * An embed is an image whose destination carries a '#'; ordinary images
-     * never do. A link must NOT be preceded by '!', hence the lookbehind.
+     * never do. The lookbehind on EMBED keeps the `!!` form out of it.
      */
-    internal val EMBED = Regex("""!\[[^\]]*]\(([^)\s]*#[^)\s]+)\)""")
-    internal val LINK = Regex("""(?<!!)\[([^\]]*)]\(([^)\s]*#[^)\s]+)\)""")
+    internal val EMBED = Regex("""(?<!!)!\[[^\]]*]\(([^)\s]*#[^)\s]+)\)""")
+    internal val FOLD = Regex("""!!\[([^\]]*)]\(([^)\s]*#[^)\s]+)\)""")
 
     /**
      * Toggle or replace the SLOT a link owns: `cbl-slot:<id>:<ref>`.
@@ -144,7 +148,7 @@ object CblMarkdown {
             render(markdown, idPrefix, slot = null, depth = 0)
 
         private fun render(markdown: String, idPrefix: String, slot: String?, depth: Int): String =
-            renderLinks(renderEmbeds(markdown, idPrefix, slot, depth), idPrefix, slot, depth)
+            renderFolds(renderEmbeds(markdown, idPrefix, slot, depth), idPrefix, slot, depth)
 
         /** `![](#ref)`: the target's headline and its text, unconditionally. No
          *  frame - see the design note on [RefRenderer]: this is the author's
@@ -175,32 +179,22 @@ object CblMarkdown {
         }
 
         /**
-         * `[text](#ref)`: the text plus an arrow, and - when the slot is open -
-         * the target's body below it.
+         * `!![text](#ref)`: the text plus an arrow, and - when the slot is open
+         * - the target's body below it. An ordinary link is left untouched
+         * here: it is a link, and the panel opens the file it names.
          *
-         * Inside a slot ([slot] set) links are anchors only: they carry the
+         * Inside a slot ([slot] set) folds are anchors only: they carry the
          * enclosing slot's id, so a click replaces that block instead of
          * opening another one under it. Lookups stay flat, however far a chain
          * of definitions goes.
          */
-        private fun renderLinks(markdown: String, idPrefix: String, slot: String?, depth: Int): String {
+        private fun renderFolds(markdown: String, idPrefix: String, slot: String?, depth: Int): String {
             var index = 0
-            return CblMarkdown.LINK.replace(markdown) { match ->
+            return CblMarkdown.FOLD.replace(markdown) { match ->
                 val text = match.groupValues[1]
                 val ref = match.groupValues[2]
                 /*
-                 * Skip what this renderer has already produced. An embed is
-                 * rendered BEFORE the link pass runs, so its body arrives here
-                 * carrying finished anchors - and their `cbl-slot:<id>:<ref>`
-                 * destination contains a '#' like any other, so the pass would
-                 * happily wrap an anchor in a second anchor. Ours are the only
-                 * destinations with a scheme of ours.
-                 */
-                if (ref.startsWith(CblMarkdown.SLOT_SCHEME) || ref.startsWith(CblMarkdown.OPEN_SCHEME) ||
-                    ref.startsWith(CblMarkdown.CLOSE_SCHEME)
-                ) return@replace match.value
-                /*
-                 * A link that points nowhere says so, closed or not. Resolving
+                 * A fold that points nowhere says so, open or not. Resolving
                  * only on click would hide the typo until someone clicked it,
                  * and an arrow that opens an empty block is the worst of the
                  * three outcomes - the reader cannot tell it from a bug.
@@ -264,15 +258,43 @@ object CblMarkdown {
         .replace("[", "\\[").replace("]", "\\]")
 
     /**
-     * Images and links of a body that came from ANOTHER file, rewritten so both
-     * resolve from the file being rendered: images to absolute URLs, links to
-     * the foreign file's path (see [rebaseLinks]).
+     * Every destination of a body that came from ANOTHER file, rewritten so it
+     * resolves from the file being rendered.
+     *
+     * A glossary entry saying `!![RAII](#raii)` means "#raii in the GLOSSARY" -
+     * resolved against the snippet it was embedded in, the fragment finds
+     * nothing and the click does nothing at all, the least helpful failure a
+     * ref can have. Same for `[here](img/x.md)` and for an image: relative to
+     * the foreign file, not to ours.
+     *
+     * ONE pass over all three forms, because the previous two - one for images,
+     * one for links - split exactly where the `!!` form sits, and each thought
+     * the other owned it. What a destination means is decided by its shape, not
+     * by the bangs in front of it: a '#' makes it a ref, everything else is a
+     * path, and only a path with one bang is an image.
      */
     fun rebaseForeign(markdown: String, target: Resolved): String {
-        var out = markdown
-        target.baseDir?.let { out = rebaseImages(out, it) }
-        target.path?.let { out = rebaseLinks(out, it) }
-        return out
+        val path = target.path
+        val baseDir = target.baseDir
+        if (path == null && baseDir == null) return markdown     // same file, nothing to move
+        val folder = path?.substringBeforeLast('/', "")?.let { if (it.isEmpty()) "" else "$it/" } ?: ""
+        return Regex("""(!{0,2})(\[[^\]]*]\()([^)\s]+)\)""").replace(markdown) { match ->
+            val (bang, head, destination) = match.destructured
+            val rebased = when {
+                // ours, already rewritten - and absolute of any kind
+                destination.startsWith(SLOT_SCHEME) || destination.startsWith(OPEN_SCHEME) ||
+                    destination.startsWith(CLOSE_SCHEME) || "://" in destination ||
+                    destination.startsWith("mailto:") || destination.startsWith("data:") ||
+                    destination.startsWith("/") -> destination
+                // a ref into the foreign file itself, or into a third one
+                destination.startsWith("#") -> if (path == null) destination else "$path$destination"
+                '#' in destination -> "$folder$destination"
+                // an image must load from the foreign folder, as an absolute URL
+                bang == "!" && baseDir != null -> java.io.File(baseDir, destination).toURI().toString()
+                else -> "$folder$destination"
+            }
+            "$bang$head$rebased)"
+        }
     }
 
     /**
@@ -289,7 +311,7 @@ object CblMarkdown {
      * blanket "no colon after" would break ordinary prose such as
      * "`@staticmethod` is a [#decorator]: it changes …".
      */
-    private val SHORTCUT = Regex("""(!?)\[([^\]\s]*#[^\]\s]+)](?![(\[])""")
+    private val SHORTCUT = Regex("""(!{0,2})\[([^\]\s]*#[^\]\s]+)](?![(\[])""")
 
     /**
      * True for a link reference definition: `[#ref]: destination` at the start
@@ -332,47 +354,12 @@ object CblMarkdown {
         val text = titleOf(destination)
         when {
             // the embed form needs no link text - it shows the headline itself
-            bang.isNotEmpty() -> "![]($destination)"
+            bang == "!" -> "![]($destination)"
             text == null -> "&#9888; *unresolved reference: `$content`*"
+            // fold and link both read as their target's headline
+            bang == "!!" -> "!![$text]($destination)"
             else -> "[$text]($destination)"
         }
     }
 
-    /**
-     * Rewrite the LINK destinations of an embedded foreign body so they point
-     * where the foreign file meant them to point, seen from the file we are
-     * rendering. A glossary entry saying `[RAII](#raii)` means "#raii in the
-     * glossary" - resolved against the snippet it is embedded in, the fragment
-     * finds nothing and the click does nothing at all, which is the least
-     * helpful failure a link can have. `[here](img/x.md)` gets the same
-     * treatment, relative to the foreign file's folder.
-     *
-     * [path] is the foreign file as the ref spelled it, e.g. `doc/glossary.md`.
-     * Images are excluded (`!` before the bracket): [rebaseImages] has already
-     * turned them into absolute file URLs.
-     */
-    private fun rebaseLinks(markdown: String, path: String): String {
-        val folder = path.substringBeforeLast('/', "").let { if (it.isEmpty()) "" else "$it/" }
-        return Regex("""(?<!!)(\[[^\]]*]\()([^)\s]+)\)""").replace(markdown) { match ->
-            val destination = match.groupValues[2]
-            val rebased = when {
-                destination.startsWith("#") -> "$path$destination"
-                "://" in destination || destination.startsWith("mailto:") ||
-                    destination.startsWith("data:") || destination.startsWith("/") ||
-                    destination.startsWith(SLOT_SCHEME) -> destination
-                else -> "$folder$destination"
-            }
-            "${match.groupValues[1]}$rebased)"
-        }
-    }
-
-    /** Rewrite relative image destinations to absolute file URLs against
-     *  [baseDir] - embedded foreign bodies must load THEIR images, not ours.
-     *  Runs after nested-embed resolution, so remaining ![]() are real images. */
-    private fun rebaseImages(markdown: String, baseDir: java.io.File): String =
-        Regex("""(!\[[^\]]*]\()([^)\s]+)\)""").replace(markdown) { match ->
-            val dest = match.groupValues[2]
-            if ("://" in dest || dest.startsWith("data:") || dest.startsWith("/")) match.value
-            else "${match.groupValues[1]}${java.io.File(baseDir, dest).toURI()})"
-        }
 }

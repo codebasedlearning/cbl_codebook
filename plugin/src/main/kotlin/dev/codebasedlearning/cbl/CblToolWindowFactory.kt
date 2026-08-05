@@ -628,6 +628,20 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
             openInEditor(target.removePrefix(CblMarkdown.OPEN_SCHEME))
             return
         }
+        // an ORDINARY link, with Markdown's own meaning: it navigates. Into
+        // this file's own blocks (select and, with follow-caret on, jump), or
+        // into another file, at the block the fragment names.
+        if (target.startsWith("#")) {
+            val block = service.model?.blockByRef(target.removePrefix("#")) ?: return
+            tocList.setSelectedValue(block, true)
+            showBlock(block)
+            if (followToggle.isSelected) navigateTo(block)
+            return
+        }
+        if (target.indexOf('#') > 0) {
+            openInEditor(target)
+            return
+        }
         val dir = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.parent ?: return
         val file = java.io.File(dir.path, target)
         if (file.isFile) {

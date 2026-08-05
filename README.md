@@ -213,38 +213,40 @@ An embed splices the target's text in (relative images are rebased to the
 foreign folder, and so are the links: a `[text](#other)` inside an embedded
 glossary entry means *that* glossary's `#other`).
 
-**Clicking** a link does not open the file it points at — it unfolds the target
-*here*, in a **slot** below the line: a thin rule, the source and title in grey,
-and the section's text. A lookup costs neither a tab nor your place in the
-snippet. The same link closes it again, a link *inside* the slot replaces its
-content (lookups stay flat, however far a chain of definitions goes), and the ⚐
-in the slot header opens the file in the editor when you really do want to go
-there. A link WITHOUT a fragment — `[notes](notes/more.md)` — opens the file, as
-a link should.
+**Three forms, three intentions** — the first is Markdown's own, the other two
+are this plugin's:
+
+```
+[#main-guard]      a LINK: navigates, exactly as a link does anywhere
+![#main-guard]     an EMBED: the target's text, always there
+!![#main-guard]    a FOLD: headline plus ▸, the text when the reader asks
+[../notes.md#tco]  an explicit path works in all three
+```
+
+A **link** opens what it names: a fragment into this file selects that block
+(and jumps the caret when follow-caret is on), a `path#ref` opens that file at
+that block, a path without a fragment opens the file. Nothing is inlined —
+which is what a reader who knows Markdown expects of a link.
+
+An **embed** is the image form one step further: transclusion instead of
+navigation. Its headline stays in the line that referred to it, its text sits in
+an indented block below.
+
+A **fold** is the question form: the headline plus `▸`, and the target's text
+only when clicked. It opens in the same indented block an embed uses, plus a
+header line — ⚐ opens the source in the editor, ✕ closes the block. A fold
+*inside* an open block replaces that block instead of nesting another one under
+it, so a chain of definitions stays flat. Clicking the same fold again closes
+it.
+
+A path-less fragment is looked up along `glossary.path` (see below), in order,
+the current file last. All three are valid CommonMark, so a foreign renderer
+shows a link, a broken image, and a literal `!` before a link — never junk.
 
 Code files are read through the parser; **Markdown files have no comments, so
 ATX headings are the blocks there** — `## Code Style`, depth = heading level.
 Slugs equal GitHub's anchors, so the same links work when reading the repository
 online.
-
-**Short forms** — brackets without parentheses — cover the glossary case that
-dominates in practice:
-
-```
-[#main-guard]      a link: headline plus ▸, unfolds on click
-![#main-guard]     an embed: the text, always there
-![../notes.md#tco] an explicit path still works
-```
-
-One axis, two forms: **brackets mean "on demand", the bang means "shown"**. A
-link is a question, a glossary word, a *see also* — the reader decides. An embed
-is a passage the author wrote here and merely keeps elsewhere, so it reads as
-prose, with only its headline saying where it lives. There is no third form and
-no fold state to manage.
-
-A path-less fragment is looked up along `glossary.path` (see below), in order,
-the current file last. Both forms are valid CommonMark, so a foreign renderer
-shows a link and a broken image respectively — never junk.
 
 **Labels** — a block can declare its own address, as a trailing anchor in the
 header:
@@ -271,15 +273,15 @@ exactly as before.
 ### Question blocks
 
 No extra syntax needed: put the answers in a second file on the path and write a
-one-liner whose body is a link.
+one-liner whose body is a fold.
 
 ```cpp
-/* ---- Why does this not compile? ---- [#const-ref-answer] */
+/* ---- Why does this not compile? ---- !![#const-ref-answer] */
 
-What prints `cout << v1`? [#answer-init-value]
+What prints `cout << v1`? !![#answer-init-value]
 ```
 
-The link shows the target's headline and a `▸`; the answer appears only when the
+The fold shows the target's headline and a `▸`; the answer appears only when the
 reader clicks, and — unlike a marker inside the snippet — is genuinely not in the
 student's file. Which puts the burden on the headline: it is what a reader sees
 before deciding to unfold, so it must not answer the question by itself. Either

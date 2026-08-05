@@ -6,8 +6,8 @@ import junit.framework.TestCase
 
 /**
  * Refs and Markdown rendering: slugs, hierarchical resolution, the short
- * `[#ref]` forms, and the two ref forms - a link that opens a slot, an embed
- * that is simply there.
+ * `[#ref]` forms, and the three ref forms - a link that navigates, an embed
+ * that is simply there, and a fold the reader opens.
  *
  * Plain JUnit on purpose. None of this needs an IDE: a [CblModel] comes just as
  * well from [CblParser.parseMarkdown] as from PSI comments (that the PSI side
@@ -192,7 +192,7 @@ class CblRefsTest : TestCase() {
         assertNull(m.blockByRef("no-such-block"))
     }
 
-    // ---- the two ref forms: link (on demand) and embed (always) ----
+    // ---- the three ref forms: link (navigates), embed (always), fold (on demand) ----
 
     /** A renderer with a given set of open slots. */
     private fun renderer(m: CblModel, open: Map<String, String> = emptyMap()) =
@@ -200,18 +200,18 @@ class CblRefsTest : TestCase() {
 
     private fun blockCount(text: String) = Regex("<div class='slot'>").findAll(text).count()
 
-    /** The header bar is what tells an opened link from an embedded block. */
+    /** The header bar is what tells an opened fold from an embedded block. */
     private fun barCount(text: String) = Regex("class='slotbar'").findAll(text).count()
 
     /**
-     * A LINK shows the target's headline and a '▸', and nothing else until it
-     * is clicked. The href carries the slot it owns and the target it points
-     * at - the panel needs both to decide between opening, replacing and
-     * closing.
+     * A FOLD (`!!`) shows the target's headline and a '▸', and nothing else
+     * until it is clicked. The href carries the slot it owns and the target it
+     * points at - the panel needs both to decide between opening, replacing
+     * and closing.
      */
-    fun testLinkIsAnArrowUntilItIsClicked() {
+    fun testFoldIsAnArrowUntilItIsClicked() {
         val m = model()
-        val closed = renderer(m).render("see [Code Style](#code-style) for more", "b0")
+        val closed = renderer(m).render("see !![Code Style](#code-style) for more", "b0")
         assertTrue("[Code Style &#9656;](${CblMarkdown.SLOT_SCHEME}b0-l0:#code-style)" in closed)
         assertEquals("nothing is shown yet", 0, blockCount(closed))
         assertFalse("use spaces, not tabs" in closed)
@@ -224,10 +224,10 @@ class CblRefsTest : TestCase() {
     fun testOpenSlotShowsTheBodyWithAHeader() {
         val m = model()
         val open = renderer(m, mapOf("b0-l0" to "#code-style"))
-            .render("see [Code Style](#code-style)", "b0")
+            .render("see !![Code Style](#code-style)", "b0")
         assertTrue("[Code Style &#9662;](${CblMarkdown.SLOT_SCHEME}b0-l0:#code-style)" in open)
         assertEquals(1, blockCount(open))
-        assertEquals("an opened link has the header bar", 1, barCount(open))
+        assertEquals("an opened fold has the header bar", 1, barCount(open))
         assertTrue("the body is there", "use spaces, not tabs" in open)
         assertTrue("open in editor", "${CblMarkdown.OPEN_SCHEME}#code-style" in open)
         assertTrue("close this slot", "${CblMarkdown.CLOSE_SCHEME}b0-l0" in open)
@@ -237,9 +237,9 @@ class CblRefsTest : TestCase() {
 
     /** Two links in one body are two slots: ids come from the occurrence, so
      *  opening one leaves the other alone. */
-    fun testTwoLinksAreIndependent() {
+    fun testTwoFoldsAreIndependent() {
         val m = model()
-        val text = "[Code Style](#code-style) and [Final Remarks](#final-remarks)"
+        val text = "!![Code Style](#code-style) and !![Final Remarks](#final-remarks)"
         val one = renderer(m, mapOf("b0-l1" to "#final-remarks")).render(text, "b0")
         assertEquals("only the second is open", 1, blockCount(one))
         assertTrue("Wrap-up of conventions" in one)
@@ -249,11 +249,11 @@ class CblRefsTest : TestCase() {
     }
 
     /**
-     * A link INSIDE an open slot carries the slot's own id, so clicking it
+     * A fold INSIDE an open slot carries the slot's own id, so clicking it
      * replaces that block instead of opening a second one under it. Lookups
      * stay flat however far a chain of definitions goes.
      */
-    fun testLinksInsideASlotReplaceIt() {
+    fun testFoldsInsideASlotReplaceIt() {
         val m = CblParser.parseMarkdown(
             """
             # Topic
@@ -262,7 +262,7 @@ class CblRefsTest : TestCase() {
 
             ## RAII
 
-            Owning is [Code Style](#code-style), see there.
+            Owning is !![Code Style](#code-style), see there.
 
             ## Code Style
 
@@ -272,7 +272,7 @@ class CblRefsTest : TestCase() {
         val open = CblMarkdown.RefRenderer(
             openRef = { if (it == "b0-l0") "#raii" else null },
             resolve = resolver(m),
-        ).render("See [RAII](#raii).", "b0")
+        ).render("See !![RAII](#raii).", "b0")
         assertEquals("one block, not two", 1, blockCount(open))
         assertTrue("Owning is" in open)
         // the inner link points at the SAME slot, with a different target
@@ -294,10 +294,19 @@ class CblRefsTest : TestCase() {
         assertFalse("no arrows", "&#9656;" in embedded || "&#9662;" in embedded)
     }
 
-    /** An unresolved ref says so, in both forms, instead of rendering nothing. */
+    /** An ordinary link is Markdown's own: the renderer does not touch it, and
+     *  the panel opens what it names. */
+    fun testAPlainLinkIsLeftAlone() {
+        val m = model()
+        val text = "see [Code Style](#code-style) and [notes](notes/more.md)"
+        assertEquals(text, renderer(m).render(text, "b0"))
+        assertEquals("nothing unfolds", 0, blockCount(renderer(m, mapOf("b0-l0" to "#code-style")).render(text, "b0")))
+    }
+
+    /** An unresolved ref says so, in both banged forms, instead of rendering nothing. */
     fun testUnresolvedRefsAreVisible() {
         val m = model()
-        assertTrue("unresolved reference: `#nope`" in renderer(m).render("[x](#nope)", "b0"))
+        assertTrue("unresolved reference: `#nope`" in renderer(m).render("!![x](#nope)", "b0"))
         assertTrue("unresolved reference: `#nope`" in renderer(m).render("![](#nope)", "b0"))
     }
 
@@ -457,7 +466,7 @@ class CblRefsTest : TestCase() {
 
             ## RAII
 
-            See [const correctness](#const-correctness), the [notes](notes/more.md)
+            See !![const correctness](#const-correctness), the [notes](notes/more.md)
             and the [guidelines](https://isocpp.github.io/).
 
             ## Const correctness
