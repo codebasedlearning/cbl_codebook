@@ -11,6 +11,12 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-08-05
+
+- One gesture vocabulary in the notes: a plain link opens its file, a fold's arrow toggles its block, a headline is link-coloured but inert — and ⌘/Ctrl-click on a headline or an arrow opens the source.
+- The opened block lost its header: no provenance line, no ✕. The arrow that opened it closes it — and once a click inside has replaced the content, the block heads itself with what it now shows.
+- Inside borrowed text — an embedded or unfolded body — a plain link is a lookup as well: it replaces the block it stands in, or opens its own under an embed. A glossary can cross-link itself in ordinary Markdown without knowing where it is cited, and the reader keeps their place; ⌘-click still opens the file.
+
 ## [2.0.0] - 2026-08-05
 
 The reference syntax settled. One axis, three forms, and the panel reads as one
@@ -21,9 +27,8 @@ document from the outline down to the last looked-up definition.
 - **Three forms, one per intention**: `[#term]` is an ordinary link and
   navigates, `![#term]` shows the target's text where it stands, `!![#term]`
   offers it behind a headline and a `▸`.
-- An opened fold appears in an indented block with a header: ⚐ opens the source
-  in the editor, ✕ closes it. A fold *inside* an open block replaces that block,
-  so a chain of lookups stays flat.
+- An opened fold appears in an indented block below the line. A fold *inside*
+  an open block replaces that block, so a chain of lookups stays flat.
 - Every fold occurrence has its own state; two refs to the same term open and
   close independently.
 - **Block labels**: a header ending in `<a id="term"></a>` is addressed by that

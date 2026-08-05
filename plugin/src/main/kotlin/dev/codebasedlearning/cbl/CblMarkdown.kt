@@ -103,6 +103,25 @@ object CblMarkdown {
     internal val FOLD = Regex("""!!\[([^\]]*)]\(([^)\s]*#[^)\s]+)\)""")
 
     /**
+     * Inside BORROWED text - an embedded or unfolded body - a plain link counts
+     * as a fold as well, so this matches both `!![t](d)` and `[t](d)` while
+     * still leaving the single-bang embed form alone.
+     *
+     * The reason is whose context a click happens in. A glossary entry linking
+     * to a neighbouring entry was written as a document, by an author who could
+     * not know where it would be cited; the reader, however, is in the middle
+     * of a snippet, and following that link to the file would cost them the
+     * context that made the entry worth reading. So: links in your own text
+     * take you somewhere, links in borrowed text keep you where you are. The
+     * flag in the block's header is the way out for when the file is what you
+     * actually want.
+     *
+     * A link WITHOUT a fragment is untouched here as well - there is no block
+     * to look up, so it stays what it looks like.
+     */
+    internal val BORROWED_REF = Regex("""(?:!!|(?<!!))\[([^\]]*)]\(([^)\s]*#[^)\s]+)\)""")
+
+    /**
      * Toggle or replace the SLOT a link owns: `cbl-slot:<id>:<ref>`.
      *
      * Separated by a COLON, not by a pipe: the href travels through a
@@ -120,12 +139,12 @@ object CblMarkdown {
      */
     const val SLOT_SCHEME = "cbl-slot:"
 
-    /** Close the slot with this id: `cbl-close:<id>`. */
-    const val CLOSE_SCHEME = "cbl-close:"
-
-    /** Open a ref in the EDITOR: `cbl-open:<ref>`. The slot's flag icon - the
-     *  one gesture that leaves the panel, and the reason a link no longer has
-     *  to be one. */
+    /**
+     * Open a ref in the EDITOR: `cbl-open:<ref>`. Reached only with the menu
+     * modifier (Cmd on macOS, Ctrl elsewhere) - on a headline, where a plain
+     * click does nothing, and on a fold's arrow, where a plain click toggles.
+     * One gesture for "the file itself", wherever the reader is.
+     */
     const val OPEN_SCHEME = "cbl-open:"
 
     /**
@@ -165,13 +184,20 @@ object CblMarkdown {
                     depth >= 1 -> "*&#8230; see `$ref` (nested embed not expanded)*"
                     else -> {
                         /*
-                         * The very same block a link opens, minus the header
+                         * The very same block a fold opens, minus the header
                          * bar: nothing to close, and nothing to say about where
                          * the text comes from that the headline does not
                          * already say. Headline in the referring line, body
                          * indented below - see [block].
+                         *
+                         * The headline IS the link: link colour, and
+                         * Cmd/Ctrl-click opens the source. A plain click does
+                         * nothing on purpose - text that is simply THERE should
+                         * not move the editor under the reader's hands. Swing
+                         * paints the hand cursor over any href, which overstates
+                         * the plain click slightly; the colour is worth it.
                          */
-                        "**${CblMarkdown.titleText(resolved.block.title)}**" +
+                        "[**${CblMarkdown.titleText(resolved.block.title)}**]($OPEN_SCHEME$ref)" +
                             block(inner(resolved, id, slot, depth))
                     }
                 }
@@ -190,9 +216,20 @@ object CblMarkdown {
          */
         private fun renderFolds(markdown: String, idPrefix: String, slot: String?, depth: Int): String {
             var index = 0
-            return CblMarkdown.FOLD.replace(markdown) { match ->
+            // depth 0 is the file's OWN text, where a link is a link; deeper is
+            // borrowed text, where a link is a lookup (see [BORROWED_REF])
+            val pattern = if (depth == 0) CblMarkdown.FOLD else CblMarkdown.BORROWED_REF
+            return pattern.replace(markdown) { match ->
                 val text = match.groupValues[1]
                 val ref = match.groupValues[2]
+                /*
+                 * Skip what this renderer has already produced: inside borrowed
+                 * text the pattern also matches plain links, and our own
+                 * anchors are plain links whose destination carries a '#'.
+                 */
+                if (ref.startsWith(CblMarkdown.SLOT_SCHEME) || ref.startsWith(CblMarkdown.OPEN_SCHEME)) {
+                    return@replace match.value
+                }
                 /*
                  * A fold that points nowhere says so, open or not. Resolving
                  * only on click would hide the typo until someone clicked it,
@@ -205,8 +242,20 @@ object CblMarkdown {
                 val anchor = "[$text ${if (shownRef == null) "&#9656;" else "&#9662;"}]($SLOT_SCHEME$id:$ref)"
                 if (shownRef == null) return@replace anchor
                 val shown = resolve(shownRef)
-                    ?: return@replace anchor + block(unresolved(shownRef), bar(id, shownRef, null))
-                anchor + block(inner(shown, id, id, depth), bar(id, shownRef, shown))
+                    ?: return@replace anchor + block(unresolved(shownRef))
+                /*
+                 * A headline inside the block, but only once the reader has
+                 * clicked THROUGH it: while the block still shows what the
+                 * arrow above it names, saying so again would be one title too
+                 * many. After a replacement the arrow names something else, and
+                 * without a headline the text would sit there unattributed -
+                 * which is the context the breadcrumb used to carry, minus the
+                 * chain nobody needed.
+                 */
+                val head =
+                    if (shownRef == ref) ""
+                    else "[**${CblMarkdown.titleText(shown.block.title)}**]($OPEN_SCHEME$shownRef)\n\n"
+                anchor + block(head + inner(shown, id, id, depth))
             }
         }
 
@@ -221,29 +270,15 @@ object CblMarkdown {
 
         /**
          * The block both forms use: a raw-HTML wrapper the stylesheet indents
-         * and rules off, holding [bar] (a link's header, empty for an embed)
-         * and the borrowed text. Raw HTML because Swing has no <details> and no
-         * float; blank lines around the content because CommonMark renders the
-         * Markdown inside an HTML block only when they are there.
+         * and rules off, holding the borrowed text and nothing else. No header,
+         * no provenance line, no close button - the arrow that opened it closes
+         * it, and the headline above it already says what this is. Raw HTML
+         * because Swing has no <details>; blank lines around the content
+         * because CommonMark renders the Markdown inside an HTML block only
+         * when they are there.
          */
-        private fun block(body: String, bar: String = ""): String =
-            "\n\n<div class='slot'>\n\n$bar$body\n\n</div>\n\n"
-
-        /**
-         * A link's header: where the text comes from, a flag that opens it in
-         * the editor, a cross that closes the slot. An embed has none - it was
-         * not opened, so there is nothing to close, and its headline already
-         * stands in the line above.
-         */
-        private fun bar(id: String, ref: String, shown: Resolved?): String {
-            val where = shown?.let {
-                if (it.path == null) it.block.title else "${it.path} &#9656; ${it.block.title}"
-            } ?: ref
-            return "<table class='slotbar' width='100%'><tr>" +
-                "<td class='slotwhere'><a href='$OPEN_SCHEME$ref'>&#9873;</a> $where</td>" +
-                "<td class='slotclose' align='right'><a href='$CLOSE_SCHEME$id'>&#10005;</a></td>" +
-                "</tr></table>\n\n"
-        }
+        private fun block(body: String): String =
+            "\n\n<div class='slot'>\n\n$body\n\n</div>\n\n"
 
         private fun unresolved(ref: String) = "&#9888; *unresolved reference: `$ref`*"
     }
@@ -283,7 +318,7 @@ object CblMarkdown {
             val rebased = when {
                 // ours, already rewritten - and absolute of any kind
                 destination.startsWith(SLOT_SCHEME) || destination.startsWith(OPEN_SCHEME) ||
-                    destination.startsWith(CLOSE_SCHEME) || "://" in destination ||
+                    "://" in destination ||
                     destination.startsWith("mailto:") || destination.startsWith("data:") ||
                     destination.startsWith("/") -> destination
                 // a ref into the foreign file itself, or into a third one

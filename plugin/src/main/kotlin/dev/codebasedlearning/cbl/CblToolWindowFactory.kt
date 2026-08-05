@@ -189,7 +189,8 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         notesPane.addHyperlinkListener { event ->
             if (event.eventType == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) {
-                openLink(event.description ?: event.url?.toExternalForm() ?: return@addHyperlinkListener)
+                val target = event.description ?: event.url?.toExternalForm() ?: return@addHyperlinkListener
+                openLink(target, menuModifier(event))
             }
         }
 
@@ -605,7 +606,7 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
      * opens as a file. A path with a fragment never arrives here: the renderer
      * turned it into a slot link, which is the whole point of the model.
      */
-    private fun openLink(target: String) {
+    private fun openLink(target: String, toEditor: Boolean = false) {
         // every click, verbatim: whether one arrives at all, and in what shape,
         // is the difference between a rendering bug, a scheme that did not
         // survive the Markdown pipeline, and a bug in the handling below
@@ -615,17 +616,15 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
             return
         }
         if (target.startsWith(CblMarkdown.SLOT_SCHEME)) {
-            toggleSlot(target.removePrefix(CblMarkdown.SLOT_SCHEME))
-            return
-        }
-        if (target.startsWith(CblMarkdown.CLOSE_SCHEME)) {
-            openSlots.remove(target.removePrefix(CblMarkdown.CLOSE_SCHEME))
-            currentDetail?.let { showBlock(it, preserveScroll = true) }
+            val slot = target.removePrefix(CblMarkdown.SLOT_SCHEME)
+            // the arrow toggles; with the modifier it takes you to the source
+            if (toEditor) openInEditor(slot.substringAfter(':')) else toggleSlot(slot)
             return
         }
         if (target.startsWith(CblMarkdown.OPEN_SCHEME)) {
-            // the slot header's explicit "take me there"
-            openInEditor(target.removePrefix(CblMarkdown.OPEN_SCHEME))
+            // an embed's headline: nothing on a plain click - text that is
+            // simply there must not move the editor - the source on Cmd/Ctrl
+            if (toEditor) openInEditor(target.removePrefix(CblMarkdown.OPEN_SCHEME))
             return
         }
         // an ORDINARY link, with Markdown's own meaning: it navigates. Into
@@ -653,6 +652,16 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
         // a click that resolves to nothing is indistinguishable from a dead
         // panel - say what arrived, so the log can settle it
         CblConsole.log("link not handled: '$target'")
+    }
+
+    /**
+     * True when the click carried the platform's menu modifier - Cmd on macOS,
+     * Ctrl elsewhere. `HyperlinkEvent` has carried its input event since Java 7;
+     * a null one (a synthetic activation) counts as a plain click.
+     */
+    private fun menuModifier(event: javax.swing.event.HyperlinkEvent): Boolean {
+        val mouse = event.inputEvent as? MouseEvent ?: return false
+        return (mouse.modifiersEx and java.awt.Toolkit.getDefaultToolkit().menuShortcutKeyMaskEx) != 0
     }
 
     /** Open `path#fragment` in the editor, at the block if the fragment
@@ -711,11 +720,6 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
                     it.addRule("div.detail { margin-top: 8px; border-top: 1px solid #$hex; }")
                     it.addRule("div.slot { margin-top: 8px; margin-left: ${LEVEL_INDENT}px; " +
                         "border-top: 1px solid #$hex; }")
-                    // the slot's header bar - a table only because Swing cannot
-                    // right-align anything else; no cell padding, no rules
-                    it.addRule("table.slotbar { margin-top: 4px; }")
-                    it.addRule("td.slotwhere { padding: 0px; color: #$hex; }")
-                    it.addRule("td.slotclose { padding: 0px; text-align: right; }")
                     // code blocks: monospace, but wrapping - see
                     // CblMarkdown.softenCodeBlocks for why they are not <pre>
                     it.addRule("div.code { font-family: Monospaced; margin-top: 8px; }")

@@ -200,9 +200,6 @@ class CblRefsTest : TestCase() {
 
     private fun blockCount(text: String) = Regex("<div class='slot'>").findAll(text).count()
 
-    /** The header bar is what tells an opened fold from an embedded block. */
-    private fun barCount(text: String) = Regex("class='slotbar'").findAll(text).count()
-
     /**
      * A FOLD (`!!`) shows the target's headline and a '▸', and nothing else
      * until it is clicked. The href carries the slot it owns and the target it
@@ -219,18 +216,16 @@ class CblRefsTest : TestCase() {
         assertEquals(1, Regex("<p>").findAll(CblMarkdown.toHtml(closed)).count())
     }
 
-    /** Clicked open: the arrow flips and the body appears in a slot, with a
-     *  header naming the source and offering the editor and a close. */
-    fun testOpenSlotShowsTheBodyWithAHeader() {
+    /** Clicked open: the arrow flips and the body appears in the block below -
+     *  no header, no close button; the arrow that opened it closes it. */
+    fun testOpenFoldShowsTheBody() {
         val m = model()
         val open = renderer(m, mapOf("b0-l0" to "#code-style"))
             .render("see !![Code Style](#code-style)", "b0")
         assertTrue("[Code Style &#9662;](${CblMarkdown.SLOT_SCHEME}b0-l0:#code-style)" in open)
         assertEquals(1, blockCount(open))
-        assertEquals("an opened fold has the header bar", 1, barCount(open))
         assertTrue("the body is there", "use spaces, not tabs" in open)
-        assertTrue("open in editor", "${CblMarkdown.OPEN_SCHEME}#code-style" in open)
-        assertTrue("close this slot", "${CblMarkdown.CLOSE_SCHEME}b0-l0" in open)
+        assertFalse("no header, no provenance line", "slotbar" in open)
         // following Markdown still renders, i.e. the block is properly closed
         assertTrue("<strong>x</strong>" in CblMarkdown.toHtml(open + "\n\nafter **x**\n"))
     }
@@ -249,9 +244,11 @@ class CblRefsTest : TestCase() {
     }
 
     /**
-     * A fold INSIDE an open slot carries the slot's own id, so clicking it
-     * replaces that block instead of opening a second one under it. Lookups
-     * stay flat however far a chain of definitions goes.
+     * Inside an open block, a PLAIN link is a lookup too, and carries that
+     * block's own id - so clicking it replaces the block instead of opening a
+     * second one under it, and a glossary can cross-link itself in ordinary
+     * Markdown without knowing it will be cited. Lookups stay flat however far
+     * a chain of definitions goes.
      */
     fun testFoldsInsideASlotReplaceIt() {
         val m = CblParser.parseMarkdown(
@@ -262,7 +259,7 @@ class CblRefsTest : TestCase() {
 
             ## RAII
 
-            Owning is !![Code Style](#code-style), see there.
+            Owning is [Code Style](#code-style), see there.
 
             ## Code Style
 
@@ -275,21 +272,69 @@ class CblRefsTest : TestCase() {
         ).render("See !![RAII](#raii).", "b0")
         assertEquals("one block, not two", 1, blockCount(open))
         assertTrue("Owning is" in open)
-        // the inner link points at the SAME slot, with a different target
+        // the inner PLAIN link points at the SAME slot, with a different target
         assertTrue("[Code Style &#9656;](${CblMarkdown.SLOT_SCHEME}b0-l0:#code-style)" in open)
+        // showing what the arrow names needs no headline - the arrow said it
+        assertFalse("[**RAII**]" in open)
+
+        // ... but once the reader has clicked THROUGH, the block says what it
+        // now shows, since the arrow above it names something else
+        val replaced = CblMarkdown.RefRenderer(
+            openRef = { if (it == "b0-l0") "#code-style" else null },
+            resolve = resolver(m),
+        ).render("See !![RAII](#raii).", "b0")
+        assertTrue("the arrow still names its own target", "[RAII &#9662;]" in replaced)
+        assertTrue(
+            "the block names what it shows",
+            "[**Code Style**](${CblMarkdown.OPEN_SCHEME}#code-style)" in replaced
+        )
+        assertTrue("- spaces" in replaced)
     }
 
-    /** An EMBED is the other form: shown always, headline and body, no arrow,
-     *  no slot, nothing to click. */
+    /**
+     * Same rule in embedded text, which has no enclosing slot: a plain link
+     * there opens a block of its own, under the embed it stands in.
+     */
+    fun testPlainLinksInsideAnEmbedBecomeLookups() {
+        val m = CblParser.parseMarkdown(
+            """
+            # Topic
+
+            ## RAII
+
+            Owning is [Code Style](#code-style), see there.
+
+            ## Code Style
+
+            - spaces
+            """.trimIndent()
+        )
+        val shown = CblMarkdown.RefRenderer(openRef = { null }, resolve = resolver(m))
+            .render("![](#raii)", "b0")
+        assertTrue(
+            "the embedded body's link owns a slot under the embed",
+            "[Code Style &#9656;](${CblMarkdown.SLOT_SCHEME}b0-e0-l0:#code-style)" in shown
+        )
+        // ... and opening THAT slot shows the target inside the embed
+        val opened = CblMarkdown.RefRenderer(
+            openRef = { if (it == "b0-e0-l0") "#code-style" else null },
+            resolve = resolver(m),
+        ).render("![](#raii)", "b0")
+        assertTrue("- spaces" in opened)
+        assertEquals("the embed's block, plus the opened one", 2, blockCount(opened))
+    }
+
+    /** An EMBED is the other form: shown always, headline and body, no arrow
+     *  and no slot - the headline links to the source, nothing toggles. */
     fun testEmbedIsAlwaysShown() {
         val m = model()
         val embedded = renderer(m).render("![](#code-style)", "b0")
-        assertTrue("headline", "**Code Style**" in embedded)
+        // the headline is the link - link-coloured, Cmd/Ctrl-click opens the
+        // source, a plain click deliberately does nothing
+        assertTrue("headline", "[**Code Style**](${CblMarkdown.OPEN_SCHEME}#code-style)" in embedded)
         assertTrue("body", "use spaces, not tabs" in embedded)
-        // the same block a link opens - same indent, same rule ...
+        // the same block a fold opens - same indent, same rule, nothing else
         assertEquals(1, blockCount(embedded))
-        // ... minus the header bar, and with nothing to click
-        assertEquals("no header bar", 0, barCount(embedded))
         assertFalse("nothing to toggle", CblMarkdown.SLOT_SCHEME in embedded)
         assertFalse("no arrows", "&#9656;" in embedded || "&#9662;" in embedded)
     }

@@ -229,15 +229,30 @@ that block, a path without a fragment opens the file. Nothing is inlined —
 which is what a reader who knows Markdown expects of a link.
 
 An **embed** is the image form one step further: transclusion instead of
-navigation. Its headline stays in the line that referred to it, its text sits in
-an indented block below.
+navigation. Its headline stays in the line that referred to it, link-coloured
+but inert on a plain click — text that is simply *there* should not move the
+editor under you — and the target's text sits in an indented block below.
 
 A **fold** is the question form: the headline plus `▸`, and the target's text
-only when clicked. It opens in the same indented block an embed uses, plus a
-header line — ⚐ opens the source in the editor, ✕ closes the block. A fold
+only when clicked. It opens in the same indented block an embed uses — no
+header, no close button, since the arrow that opened it closes it again. A fold
 *inside* an open block replaces that block instead of nesting another one under
-it, so a chain of definitions stays flat. Clicking the same fold again closes
-it.
+it, so a chain of definitions stays flat — and from the first replacement on the
+block carries the headline of what it *now* shows, since the arrow above it
+names something else by then.
+
+**⌘-click** (Ctrl elsewhere) on a headline or a fold's arrow opens the source in
+the editor — one gesture for "the file itself", wherever you are. A plain click
+keeps you in the panel: the arrow toggles, the headline does nothing.
+
+**Inside borrowed text the rule flips**: in an embedded or unfolded body, a
+plain link is a lookup too — it replaces the block it stands in, or opens one of
+its own under an embed. A glossary entry is written as a document, by an author
+who cannot know where it will be cited; the reader, though, is in the middle of
+a snippet, and following that link to the file would cost them the context that
+made the entry worth reading. So: *links in your own text take you somewhere,
+links in borrowed text keep you where you are* — and ⌘-click is the way out when
+the file is what you actually want.
 
 A path-less fragment is looked up along `glossary.path` (see below), in order,
 the current file last. All three are valid CommonMark, so a foreign renderer
