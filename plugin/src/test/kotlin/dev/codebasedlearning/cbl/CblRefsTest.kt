@@ -5,8 +5,9 @@ package dev.codebasedlearning.cbl
 import junit.framework.TestCase
 
 /**
- * Refs, embeds and Markdown rendering: slugs, hierarchical resolution, the short
- * `[#ref]` forms, embed framing.
+ * Refs and Markdown rendering: slugs, hierarchical resolution, the short
+ * `[#ref]` forms, and the two ref forms - a link that opens a slot, an embed
+ * that is simply there.
  *
  * Plain JUnit on purpose. None of this needs an IDE: a [CblModel] comes just as
  * well from [CblParser.parseMarkdown] as from PSI comments (that the PSI side
@@ -39,8 +40,6 @@ class CblRefsTest : TestCase() {
     private fun resolver(m: CblModel): (String) -> CblMarkdown.Resolved? = { ref ->
         m.blockByRef(ref.removePrefix("#"))?.let { CblMarkdown.Resolved(it) }
     }
-
-    private fun frameCount(text: String) = Regex("<div class='embed'>").findAll(text).count()
 
     fun testSlugs() {
         assertEquals("final-remarks", CblModel.slugOf("**Final Remarks**"))
@@ -85,8 +84,8 @@ class CblRefsTest : TestCase() {
                 m.blockByRef(ref.removePrefix("#"))?.title
             }
         )
-        val embed = CblMarkdown.resolveEmbeds("![](#acdf)", resolve = resolver(m))
-        assertTrue("the frame is titled with the front part", "**Background Const**" in embed)
+        val embed = CblMarkdown.RefRenderer({ null }, resolver(m)).render("![](#acdf)", "b0")
+        assertTrue("the embed is headed with the front part", "**Background Const**" in embed)
         assertTrue("binds a promise" in embed)
     }
 
@@ -144,6 +143,36 @@ class CblRefsTest : TestCase() {
         assertSame(m.blocks[1], m.blockByRef("answer-0x02-3-a2-3"))
     }
 
+    /**
+     * A file that groups its entries separates the groups with a rule - and a
+     * heading's body reaches to the next heading, so the LAST entry of every
+     * group would end with a horizontal line that none of its siblings has.
+     * The rule belongs to the file's layout, not to the entry.
+     */
+    fun testATrailingRuleIsNotPartOfTheBody() {
+        val m = CblParser.parseMarkdown(
+            """
+            ## Unnamed namespace
+
+            body text
+
+            ---
+
+            ## Next group
+
+            - a
+            - b
+
+            ***
+            """.trimIndent()
+        )
+        assertEquals(listOf("body text"), m.blocks[0].bodyLines)
+        assertEquals(listOf("- a", "- b"), m.blocks[1].bodyLines)
+        // ... while a rule INSIDE a body is content and stays
+        val kept = CblParser.parseMarkdown("## T\n\nabove\n\n---\n\nbelow\n")
+        assertEquals(listOf("above", "", "---", "", "below"), kept.blocks[0].bodyLines)
+    }
+
     fun testHierarchicalResolutionMatchesAChainSuffix() {
         val m = CblParser.parseMarkdown(
             """
@@ -163,172 +192,113 @@ class CblRefsTest : TestCase() {
         assertNull(m.blockByRef("no-such-block"))
     }
 
-    fun testEmbedSplicesTheReferencedBody() {
+    // ---- the two ref forms: link (on demand) and embed (always) ----
+
+    /** A renderer with a given set of open slots. */
+    private fun renderer(m: CblModel, open: Map<String, String> = emptyMap()) =
+        CblMarkdown.RefRenderer(openRef = { open[it] }, resolve = resolver(m))
+
+    private fun blockCount(text: String) = Regex("<div class='slot'>").findAll(text).count()
+
+    /** The header bar is what tells an opened link from an embedded block. */
+    private fun barCount(text: String) = Regex("class='slotbar'").findAll(text).count()
+
+    /**
+     * A LINK shows the target's headline and a '▸', and nothing else until it
+     * is clicked. The href carries the slot it owns and the target it points
+     * at - the panel needs both to decide between opening, replacing and
+     * closing.
+     */
+    fun testLinkIsAnArrowUntilItIsClicked() {
         val m = model()
-        val resolved = CblMarkdown.resolveEmbeds(
-            m.blocks[0].bodyLines.joinToString("\n"), resolve = resolver(m)
-        )
-        assertTrue("the referenced body must be spliced in", "use spaces, not tabs" in resolved)
-        assertTrue("the referenced title must come along", "Code Style" in resolved)
-        assertEquals("a single embed still owns a frame", 1, frameCount(resolved))
-        // a click-REFERENCE stays a plain link, untouched by the embed pass
-        assertTrue("[style](#final-remarks:code-style)" in resolved)
-        // and a ref into the void says so instead of rendering nothing
-        assertTrue(
-            "unresolved reference: `#nope`" in
-                CblMarkdown.resolveEmbeds("![](#nope)", resolve = resolver(m))
-        )
+        val closed = renderer(m).render("see [Code Style](#code-style) for more", "b0")
+        assertTrue("[Code Style &#9656;](${CblMarkdown.SLOT_SCHEME}b0-l0:#code-style)" in closed)
+        assertEquals("nothing is shown yet", 0, blockCount(closed))
+        assertFalse("use spaces, not tabs" in closed)
+        // the sentence around it survives as one paragraph
+        assertEquals(1, Regex("<p>").findAll(CblMarkdown.toHtml(closed)).count())
     }
 
-    fun testFoldedEmbedRendersTheToggleOnly() {
+    /** Clicked open: the arrow flips and the body appears in a slot, with a
+     *  header naming the source and offering the editor and a close. */
+    fun testOpenSlotShowsTheBodyWithAHeader() {
         val m = model()
-        val toggle = "${CblMarkdown.TOGGLE_SCHEME}#code-style"
-        val folded = CblMarkdown.resolveEmbeds(
-            "![](#code-style)", expanded = { false }, resolve = resolver(m)
-        )
-        assertTrue("folded embed carries the toggle link", toggle in folded)
-        assertFalse("folded embed must not splice the body", "use spaces, not tabs" in folded)
+        val open = renderer(m, mapOf("b0-l0" to "#code-style"))
+            .render("see [Code Style](#code-style)", "b0")
+        assertTrue("[Code Style &#9662;](${CblMarkdown.SLOT_SCHEME}b0-l0:#code-style)" in open)
+        assertEquals(1, blockCount(open))
+        assertEquals("an opened link has the header bar", 1, barCount(open))
+        assertTrue("the body is there", "use spaces, not tabs" in open)
+        assertTrue("open in editor", "${CblMarkdown.OPEN_SCHEME}#code-style" in open)
+        assertTrue("close this slot", "${CblMarkdown.CLOSE_SCHEME}b0-l0" in open)
+        // following Markdown still renders, i.e. the block is properly closed
+        assertTrue("<strong>x</strong>" in CblMarkdown.toHtml(open + "\n\nafter **x**\n"))
+    }
 
-        val unfolded = CblMarkdown.resolveEmbeds(
-            "![](#code-style)", expanded = { true }, resolve = resolver(m)
-        )
-        assertTrue("unfolded embed keeps the toggle link", toggle in unfolded)
-        assertTrue("unfolded embed splices the body", "use spaces, not tabs" in unfolded)
+    /** Two links in one body are two slots: ids come from the occurrence, so
+     *  opening one leaves the other alone. */
+    fun testTwoLinksAreIndependent() {
+        val m = model()
+        val text = "[Code Style](#code-style) and [Final Remarks](#final-remarks)"
+        val one = renderer(m, mapOf("b0-l1" to "#final-remarks")).render(text, "b0")
+        assertEquals("only the second is open", 1, blockCount(one))
+        assertTrue("Wrap-up of conventions" in one)
+        assertFalse("use spaces, not tabs" in one)
+        // ... and the ids are what tells them apart
+        assertTrue("b0-l0:#code-style" in one && "b0-l1:#final-remarks" in one)
     }
 
     /**
-     * The quiz form: a question, and the answer behind an arrow in the same
-     * line. The target's HEADLINE stands in the sentence, the arrow after it,
-     * and the body appears only when unfolded - the headline is the author's
-     * responsibility, the body is the plugin's.
+     * A link INSIDE an open slot carries the slot's own id, so clicking it
+     * replaces that block instead of opening a second one under it. Lookups
+     * stay flat however far a chain of definitions goes.
      */
-    fun testInlineEmbedShowsTheHeadlineThenTheArrow() {
-        val m = model()
-        val toggle = "${CblMarkdown.TOGGLE_SCHEME}#code-style"
-        val question = "What prints `cout << v1`? ![](#code-style)"
+    fun testLinksInsideASlotReplaceIt() {
+        val m = CblParser.parseMarkdown(
+            """
+            # Topic
 
-        val folded = CblMarkdown.resolveEmbeds(question, expanded = { false }, resolve = resolver(m))
-        assertEquals("no frame while folded", 0, frameCount(folded))
-        assertTrue(
-            "headline and arrow sit inline, in the question's line",
-            "v1`? [Code Style &#9656;]($toggle)" in folded
+            See [RAII](#raii).
+
+            ## RAII
+
+            Owning is [Code Style](#code-style), see there.
+
+            ## Code Style
+
+            - spaces
+            """.trimIndent()
         )
-        assertFalse("folded inline embed must not splice the body", "use spaces, not tabs" in folded)
-        // one paragraph, one link - the sentence survives the pass
-        val html = CblMarkdown.toHtml(folded)
-        assertEquals(1, Regex("<p>").findAll(html).count())
-
-        val unfolded = CblMarkdown.resolveEmbeds(question, expanded = { true }, resolve = resolver(m))
-        assertTrue("unfolded flips the arrow", "[Code Style &#9662;]($toggle)" in unfolded)
-        assertEquals("the body comes framed, below", 1, frameCount(unfolded))
-        assertTrue("use spaces, not tabs" in unfolded)
-        // the headline stands in the sentence, so the frame does not repeat it
-        assertFalse("**Code Style**" in unfolded)
+        val open = CblMarkdown.RefRenderer(
+            openRef = { if (it == "b0-l0") "#raii" else null },
+            resolve = resolver(m),
+        ).render("See [RAII](#raii).", "b0")
+        assertEquals("one block, not two", 1, blockCount(open))
+        assertTrue("Owning is" in open)
+        // the inner link points at the SAME slot, with a different target
+        assertTrue("[Code Style &#9656;](${CblMarkdown.SLOT_SCHEME}b0-l0:#code-style)" in open)
     }
 
-    /** Brackets in a title would end the link text early - they are escaped. */
-    fun testTitleBracketsSurviveTheToggleLink() {
-        val m = CblParser.parseMarkdown("# T\n\n## See [x] first\n\nbody")
-        val inline = CblMarkdown.resolveEmbeds(
-            "ref ![](#see-x-first)", expanded = { false }, resolve = resolver(m)
-        )
-        assertTrue("See \\[x\\] first &#9656;" in inline)
-        // ... and it renders as ONE link, not as a short link plus stray prose
-        val html = CblMarkdown.toHtml(inline)
-        assertEquals(1, Regex("<a ").findAll(html).count())
-        assertTrue("See [x] first" in html)
+    /** An EMBED is the other form: shown always, headline and body, no arrow,
+     *  no slot, nothing to click. */
+    fun testEmbedIsAlwaysShown() {
+        val m = model()
+        val embedded = renderer(m).render("![](#code-style)", "b0")
+        assertTrue("headline", "**Code Style**" in embedded)
+        assertTrue("body", "use spaces, not tabs" in embedded)
+        // the same block a link opens - same indent, same rule ...
+        assertEquals(1, blockCount(embedded))
+        // ... minus the header bar, and with nothing to click
+        assertEquals("no header bar", 0, barCount(embedded))
+        assertFalse("nothing to toggle", CblMarkdown.SLOT_SCHEME in embedded)
+        assertFalse("no arrows", "&#9656;" in embedded || "&#9662;" in embedded)
     }
 
-    /** Text following an inline embed must stay Markdown, i.e. the frame has to
-     *  close with a blank line (same contract as the stand-alone forms). */
-    fun testInlineEmbedIsFollowedByABlankLine() {
+    /** An unresolved ref says so, in both forms, instead of rendering nothing. */
+    fun testUnresolvedRefsAreVisible() {
         val m = model()
-        val text = CblMarkdown.resolveEmbeds(
-            "question? ![](#code-style)\nafter **bold**\n", expanded = { true }, resolve = resolver(m)
-        )
-        assertTrue("blank line missing after the frame", "</div>\n\n" in text)
-        assertTrue("<strong>bold</strong>" in CblMarkdown.toHtml(text))
-    }
-
-    /** A line that holds nothing but the embed keeps the titled, framed form -
-     *  position is what distinguishes the two, and only that. */
-    fun testStandaloneEmbedIsUnaffectedByTheInlineForm() {
-        val m = model()
-        val folded = CblMarkdown.resolveEmbeds(
-            "  ![](#code-style)", expanded = { false }, resolve = resolver(m)
-        )
-        assertEquals(1, frameCount(folded))
-        assertTrue("stand-alone embeds still show their title", "Code Style" in folded)
-    }
-
-    /**
-     * `!!` pins an embed open: a transclusion, not a question. Same frame, same
-     * headline, but no arrow and no toggle link - there is nothing to fold, so
-     * the fold state is never consulted (`expanded = { false }` below).
-     */
-    fun testDoubleBangPinsAnEmbedOpen() {
-        val m = model()
-        val pinned = CblMarkdown.resolveEmbeds(
-            "!![](#code-style)", expanded = { false }, resolve = resolver(m)
-        )
-        // no frame: a frame marks text the reader let in, and pinned text was
-        // written here - only its headline says where it is kept
-        assertEquals("not framed", 0, frameCount(pinned))
-        assertTrue("headline stays", "**Code Style**" in pinned)
-        assertTrue("body is spliced despite the fold state", "use spaces, not tabs" in pinned)
-        assertFalse("no toggle link", CblMarkdown.TOGGLE_SCHEME in pinned)
-        assertFalse("no arrow", "&#9656;" in pinned || "&#9662;" in pinned)
-        // the extra '!' is consumed, not left in the text
-        assertFalse("!" in CblMarkdown.toHtml(pinned).substringBefore("Code Style"))
-
-        // inline, the headline stands in the sentence and the body follows
-        val inline = CblMarkdown.resolveEmbeds(
-            "as defined here: !![](#code-style)", expanded = { false }, resolve = resolver(m)
-        )
-        assertTrue("here: Code Style" in inline)
-        assertFalse(CblMarkdown.TOGGLE_SCHEME in inline)
-        assertTrue("use spaces, not tabs" in inline)
-        assertEquals("nor framed inline", 0, frameCount(inline))
-        // ... and the following Markdown still renders, i.e. the paragraph the
-        // sentence started is properly closed
-        assertTrue(
-            "<strong>bold</strong>" in CblMarkdown.toHtml(
-                CblMarkdown.resolveEmbeds(
-                    "here: !![](#code-style)\nafter **bold**\n", resolve = resolver(m)
-                )
-            )
-        )
-
-        // and the short form carries the second bang through
-        assertEquals("!![](dictionary.md#tco)", CblMarkdown.expandShortcuts("!![#tco]", listOf("dictionary.md")) { "T" })
-        assertEquals("![](dictionary.md#tco)", CblMarkdown.expandShortcuts("![#tco]", listOf("dictionary.md")) { "T" })
-    }
-
-    fun testAdjacentEmbedsShareOneFrame() {
-        val m = model()
-        val frames = { text: String -> frameCount(CblMarkdown.resolveEmbeds(text, resolve = resolver(m))) }
-        assertEquals(1, frames("![](#code-style)\n![](#final-remarks)\n"))
-        assertEquals("blank lines still make one run", 1, frames("![](#code-style)\n\n![](#final-remarks)\n"))
-        assertEquals("trailing whitespace must not break the run", 1, frames("![](#code-style)   \n![](#final-remarks)  \n"))
-        assertEquals("prose in between breaks the run", 2, frames("![](#code-style)\n\nprose\n\n![](#final-remarks)\n"))
-        // both titles survive the merge
-        val merged = CblMarkdown.resolveEmbeds("![](#code-style)\n![](#final-remarks)\n", resolve = resolver(m))
-        assertTrue("Code Style" in merged && "Final Remarks" in merged)
-    }
-
-    fun testEmbedFrameIsFollowedByABlankLine() {
-        val m = model()
-        val run = CblMarkdown.resolveEmbeds(
-            "![](#code-style)\n![](#final-remarks)\nafter **bold**\n", resolve = resolver(m)
-        )
-        val single = CblMarkdown.resolveEmbeds("![](#code-style)\nafter **bold**\n", resolve = resolver(m))
-        for ((name, text) in listOf("run" to run, "single" to single)) {
-            assertTrue("$name: blank line missing after the frame", "</div>\n\nafter" in text)
-            assertTrue(
-                "$name: following Markdown must still be rendered",
-                "<strong>bold</strong>" in CblMarkdown.toHtml(text)
-            )
-        }
+        assertTrue("unresolved reference: `#nope`" in renderer(m).render("[x](#nope)", "b0"))
+        assertTrue("unresolved reference: `#nope`" in renderer(m).render("![](#nope)", "b0"))
     }
 
     fun testShortRefExpansion() {
@@ -392,7 +362,7 @@ class CblRefsTest : TestCase() {
      * Code blocks must not be `<pre>`: Swing lays one out on a single line, and
      * a view that cannot fit its content stops tracking the viewport - so one
      * 90-column line of C++ widens the whole pane and re-flows every paragraph
-     * around it. Exactly what "the text above reformats when I open a peek"
+     * around it. Exactly what "the text above reformats when I open a lookup"
      * turned out to be.
      */
     fun testCodeBlocksWrapInsteadOfWidening() {
@@ -495,21 +465,20 @@ class CblRefsTest : TestCase() {
             body
             """.trimIndent()
         )
-        val resolved = CblMarkdown.resolveEmbeds("![](doc/glossary.md#raii)") { ref ->
+        val resolved = CblMarkdown.RefRenderer(openRef = { null }, resolve = { ref ->
             foreign.blockByRef(ref.substringAfter('#'))
                 ?.let { CblMarkdown.Resolved(it, java.io.File("/course/doc"), "doc/glossary.md") }
-        }
+        }).render("![](doc/glossary.md#raii)", "b0")
         assertTrue(
             "a fragment becomes a cross-file ref into the glossary",
-            "[const correctness](doc/glossary.md#const-correctness)" in resolved
+            "[const correctness &#9656;](${CblMarkdown.SLOT_SCHEME}b0-e0-l0:doc/glossary.md#const-correctness)"
+                in resolved
         )
         assertTrue(
             "a relative path is rebased to the glossary's folder",
             "[notes](doc/notes/more.md)" in resolved
         )
         assertTrue("web links are left alone", "(https://isocpp.github.io/)" in resolved)
-        // the toggle link the embed itself generates must not be rewritten
-        assertTrue("${CblMarkdown.TOGGLE_SCHEME}doc/glossary.md#raii)" in resolved)
     }
 
     fun testCrossFileEmbedRebasesImages() {
@@ -524,10 +493,10 @@ class CblRefsTest : TestCase() {
             ![sketch](img/sketch.png)
             """.trimIndent()
         )
-        val resolved = CblMarkdown.resolveEmbeds("![](dictionary.md#with-image)") { ref ->
+        val resolved = CblMarkdown.RefRenderer(openRef = { null }, resolve = { ref ->
             foreign.blockByRef(ref.substringAfter('#'))
                 ?.let { CblMarkdown.Resolved(it, java.io.File("/course/notes")) }
-        }
+        }).render("![](dictionary.md#with-image)", "b0")
         assertTrue("With Image" in resolved)
         assertTrue(
             "foreign image must be rebased to its own folder",

@@ -18,7 +18,7 @@ object CblMarkdown {
      * staple ("instance method | classmethod | staticmethod") and CommonMark has
      * no table syntax at all - pipes would render as a literal paragraph. GFM is
      * a superset, so everything else parses as before; the defaults for link
-     * handling are inherited unchanged, which keeps the `cbl-toggle:` scheme
+     * handling are inherited unchanged, which keeps the `cbl-slot:` scheme
      * working. Swing renders tables without rules, hence the padding in the
      * notes pane stylesheet - keep tables narrow.
      */
@@ -80,47 +80,188 @@ object CblMarkdown {
     )
 
     /**
-     * Embed syntax: ![...](#ref) or ![...](path.md#ref) - the image form
-     * carries transclusion semantics, exactly as it does for images.
-     * Ordinary images never contain '#'.
+     * The two ref forms, and the whole difference between them:
      *
-     * A SECOND leading '!' (group 1) pins the embed open: `!![](#ref)` is a
-     * transclusion - text that belongs here and is merely kept in one place -
-     * while `![](#ref)` is a question, folded until asked. Two different
-     * intentions, one character apart, and the extra '!' costs a foreign
-     * renderer nothing but a literal '!'.
+     *  - `[text](path#ref)` - a LINK: the target's headline plus a small '\u25b8'.
+     *    Nothing is shown until the reader clicks it, and clicking again hides
+     *    it. This is what a question, a glossary word, a "see also" is.
+     *  - `![text](path#ref)` - an EMBED: the target's text, always there. This
+     *    is what a passage the author wrote here but keeps elsewhere is.
+     *
+     * Brackets mean "on demand", the bang means "shown" - one axis, no third
+     * form. Both are ordinary Markdown, so a foreign renderer degrades them to
+     * a link and to a broken image respectively, never to junk.
+     *
+     * An embed is an image whose destination carries a '#'; ordinary images
+     * never do. A link must NOT be preceded by '!', hence the lookbehind.
      */
-    private val EMBED = Regex("""(!?)!\[[^\]]*]\(([^)\s]*#[^)\s]+)\)""")
+    internal val EMBED = Regex("""!\[[^\]]*]\(([^)\s]*#[^)\s]+)\)""")
+    internal val LINK = Regex("""(?<!!)\[([^\]]*)]\(([^)\s]*#[^)\s]+)\)""")
 
     /**
-     * A RUN of stand-alone embeds: consecutive lines that hold nothing but an
-     * embed, blank lines in between allowed. Such a run becomes ONE frame with
-     * several entries instead of one frame each - otherwise a list of glossary
-     * refs shows a doubled rule (bottom border plus top border) and a paragraph
-     * gap between every pair. Adjacent-sibling CSS would be the natural fix,
-     * but Swing's HTML engine does not support it, so the markup has to merge.
+     * Toggle or replace the SLOT a link owns: `cbl-slot:<id>:<ref>`.
      *
-     * Deliberately does NOT consume the line break after the last embed: the
-     * blank line that [frame] then forms is what TERMINATES the raw HTML block.
-     * Swallow it and CommonMark keeps the following line inside the block -
-     * visible first as a missing gap under the closing rule, and worse, as the
-     * next paragraph's Markdown no longer being rendered.
+     * Separated by a COLON, not by a pipe: the href travels through a
+     * GitHub-flavoured Markdown parser, which reads '|' as a table delimiter,
+     * and through an HTML generator that may percent-encode it. Slot ids are
+     * built from letters, digits and '-', so the first colon after the scheme
+     * is unambiguous.
+     *
+     * Every link occurrence owns one slot, identified by where it stands, and
+     * the slot holds at most one target at a time. The anchor's own click
+     * opens it, clicking the anchor again with the same target closes it, and
+     * a link INSIDE the slot carries the same id with a different target -
+     * which is what makes a lookup chain replace the block instead of nesting
+     * a new one inside it.
      */
-    private val EMBED_RUN = Regex(
-        """(?m)^[ \t]*!?!\[[^\]]*]\([^)\s]*#[^)\s]+\)""" +
-            """(?:(?:[ \t]*\R[ \t]*)+!?!\[[^\]]*]\([^)\s]*#[^)\s]+\))*[ \t]*"""
-    )
+    const val SLOT_SCHEME = "cbl-slot:"
 
-    /** Custom link scheme for fold/unfold of embedded blocks - the panel's
-     *  hyperlink listener dispatches on it and re-renders. */
-    const val TOGGLE_SCHEME = "cbl-toggle:"
+    /** Close the slot with this id: `cbl-close:<id>`. */
+    const val CLOSE_SCHEME = "cbl-close:"
 
-    /** Custom link scheme for "open this in the EDITOR", used by the peek
-     *  header - a plain link would only open the peek again. */
+    /** Open a ref in the EDITOR: `cbl-open:<ref>`. The slot's flag icon - the
+     *  one gesture that leaves the panel, and the reason a link no longer has
+     *  to be one. */
     const val OPEN_SCHEME = "cbl-open:"
 
-    /** Custom link scheme for the peek's close button. */
-    const val CLOSE_SCHEME = "cbl-close:"
+    /**
+     * Renders the ref forms of one notes page.
+     *
+     * [openRef] answers, for a slot id, which target that slot currently shows
+     * (null = closed); [resolve] turns a destination into a block. Both are the
+     * panel's business - this class only decides what the Markdown looks like.
+     */
+    class RefRenderer(
+        private val openRef: (String) -> String?,
+        private val resolve: (String) -> Resolved?,
+    ) {
+        /**
+         * [idPrefix] must be unique per rendered body: slot ids are built from
+         * it plus the occurrence index, which is what keeps two `[#raii]` in one
+         * file independent of each other, and stable across re-renders.
+         */
+        fun render(markdown: String, idPrefix: String): String =
+            render(markdown, idPrefix, slot = null, depth = 0)
+
+        private fun render(markdown: String, idPrefix: String, slot: String?, depth: Int): String =
+            renderLinks(renderEmbeds(markdown, idPrefix, slot, depth), idPrefix, slot, depth)
+
+        /** `![](#ref)`: the target's headline and its text, unconditionally. No
+         *  frame - see the design note on [RefRenderer]: this is the author's
+         *  prose, kept elsewhere, and prose is not boxed. */
+        private fun renderEmbeds(markdown: String, idPrefix: String, slot: String?, depth: Int): String {
+            var index = 0
+            return CblMarkdown.EMBED.replace(markdown) { match ->
+                val ref = match.groupValues[1]
+                val id = "$idPrefix-e${index++}"
+                val resolved = resolve(ref)
+                when {
+                    resolved == null -> unresolved(ref)
+                    // an embed inside an embedded body would recurse forever
+                    depth >= 1 -> "*&#8230; see `$ref` (nested embed not expanded)*"
+                    else -> {
+                        /*
+                         * The very same block a link opens, minus the header
+                         * bar: nothing to close, and nothing to say about where
+                         * the text comes from that the headline does not
+                         * already say. Headline in the referring line, body
+                         * indented below - see [block].
+                         */
+                        "**${CblMarkdown.titleText(resolved.block.title)}**" +
+                            block(inner(resolved, id, slot, depth))
+                    }
+                }
+            }
+        }
+
+        /**
+         * `[text](#ref)`: the text plus an arrow, and - when the slot is open -
+         * the target's body below it.
+         *
+         * Inside a slot ([slot] set) links are anchors only: they carry the
+         * enclosing slot's id, so a click replaces that block instead of
+         * opening another one under it. Lookups stay flat, however far a chain
+         * of definitions goes.
+         */
+        private fun renderLinks(markdown: String, idPrefix: String, slot: String?, depth: Int): String {
+            var index = 0
+            return CblMarkdown.LINK.replace(markdown) { match ->
+                val text = match.groupValues[1]
+                val ref = match.groupValues[2]
+                /*
+                 * Skip what this renderer has already produced. An embed is
+                 * rendered BEFORE the link pass runs, so its body arrives here
+                 * carrying finished anchors - and their `cbl-slot:<id>:<ref>`
+                 * destination contains a '#' like any other, so the pass would
+                 * happily wrap an anchor in a second anchor. Ours are the only
+                 * destinations with a scheme of ours.
+                 */
+                if (ref.startsWith(CblMarkdown.SLOT_SCHEME) || ref.startsWith(CblMarkdown.OPEN_SCHEME) ||
+                    ref.startsWith(CblMarkdown.CLOSE_SCHEME)
+                ) return@replace match.value
+                /*
+                 * A link that points nowhere says so, closed or not. Resolving
+                 * only on click would hide the typo until someone clicked it,
+                 * and an arrow that opens an empty block is the worst of the
+                 * three outcomes - the reader cannot tell it from a bug.
+                 */
+                if (resolve(ref) == null) return@replace unresolved(ref)
+                val id = slot ?: "$idPrefix-l${index++}"
+                val shownRef = if (slot == null) openRef(id) else null
+                val anchor = "[$text ${if (shownRef == null) "&#9656;" else "&#9662;"}]($SLOT_SCHEME$id:$ref)"
+                if (shownRef == null) return@replace anchor
+                val shown = resolve(shownRef)
+                    ?: return@replace anchor + block(unresolved(shownRef), bar(id, shownRef, null))
+                anchor + block(inner(shown, id, id, depth), bar(id, shownRef, shown))
+            }
+        }
+
+        /** The target's body, rebased to ITS file and rendered with the same
+         *  machinery - so an embed inside it works, and a link inside it knows
+         *  which slot it belongs to. */
+        private fun inner(target: Resolved, idPrefix: String, slot: String?, depth: Int): String =
+            render(
+                CblMarkdown.rebaseForeign(target.block.bodyLines.joinToString("\n"), target),
+                idPrefix, slot, depth + 1,
+            )
+
+        /**
+         * The block both forms use: a raw-HTML wrapper the stylesheet indents
+         * and rules off, holding [bar] (a link's header, empty for an embed)
+         * and the borrowed text. Raw HTML because Swing has no <details> and no
+         * float; blank lines around the content because CommonMark renders the
+         * Markdown inside an HTML block only when they are there.
+         */
+        private fun block(body: String, bar: String = ""): String =
+            "\n\n<div class='slot'>\n\n$bar$body\n\n</div>\n\n"
+
+        /**
+         * A link's header: where the text comes from, a flag that opens it in
+         * the editor, a cross that closes the slot. An embed has none - it was
+         * not opened, so there is nothing to close, and its headline already
+         * stands in the line above.
+         */
+        private fun bar(id: String, ref: String, shown: Resolved?): String {
+            val where = shown?.let {
+                if (it.path == null) it.block.title else "${it.path} &#9656; ${it.block.title}"
+            } ?: ref
+            return "<table class='slotbar' width='100%'><tr>" +
+                "<td class='slotwhere'><a href='$OPEN_SCHEME$ref'>&#9873;</a> $where</td>" +
+                "<td class='slotclose' align='right'><a href='$CLOSE_SCHEME$id'>&#10005;</a></td>" +
+                "</tr></table>\n\n"
+        }
+
+        private fun unresolved(ref: String) = "&#9888; *unresolved reference: `$ref`*"
+    }
+
+    /**
+     * A block title as rendered text. Brackets are escaped - a title may
+     * legitimately contain them ("See [#acdf] for details"), and an unescaped
+     * one would end a link text early and leave the rest as prose. The escapes
+     * are inert everywhere else, so the same form serves headlines too.
+     */
+    internal fun titleText(title: String): String = title.ifBlank { "(untitled)" }
+        .replace("[", "\\[").replace("]", "\\]")
 
     /**
      * Images and links of a body that came from ANOTHER file, rewritten so both
@@ -136,10 +277,10 @@ object CblMarkdown {
 
     /**
      * Short ref form: brackets WITHOUT parentheses, containing a fragment -
-     * `[#main-guard]` references, `![#main-guard]` embeds, `!![#main-guard]`
-     * pins one open, and an explicit path works too (`![../notes.md#tco]`).
-     * A CommonMark shortcut reference, so a foreign renderer prints it as
-     * literal text instead of mangling it.
+     * `[#main-guard]` links to a block, `![#main-guard]` shows it, and an
+     * explicit path works too (`![../notes.md#tco]`). A CommonMark shortcut
+     * reference, so a foreign renderer prints it as literal text instead of
+     * mangling it.
      *
      * The lookahead keeps the full forms out: `[t](#r)`, `![](#r)`, `[#r][l]`.
      * Prose brackets never match, because the content must contain a '#' and no
@@ -148,7 +289,7 @@ object CblMarkdown {
      * blanket "no colon after" would break ordinary prose such as
      * "`@staticmethod` is a [#decorator]: it changes …".
      */
-    private val SHORTCUT = Regex("""(!{0,2})\[([^\]\s]*#[^\]\s]+)](?![(\[])""")
+    private val SHORTCUT = Regex("""(!?)\[([^\]\s]*#[^\]\s]+)](?![(\[])""")
 
     /**
      * True for a link reference definition: `[#ref]: destination` at the start
@@ -165,15 +306,15 @@ object CblMarkdown {
     }
 
     /**
-     * Rewrites [SHORTCUT] refs into canonical Markdown, BEFORE embeds and
-     * rendering - so everything downstream (embed splicing, cycle cap, image
-     * rebasing, click handling) sees only the long forms and stays unchanged.
+     * Rewrites [SHORTCUT] refs into canonical Markdown, BEFORE rendering - so
+     * everything downstream (slots, embeds, image rebasing, click handling)
+     * sees only the long forms and stays unchanged.
      *
      * A path-less fragment is looked up along [glossaryPath] (the configured
      * files as paths relative to the current file), in order, first hit wins,
      * and finally in the current file. [titleOf] does the probing and supplies
-     * the link text of reference forms; an unresolved one renders the usual
-     * warning rather than a link into the void.
+     * the link text; an unresolved ref renders the usual warning rather than a
+     * link into the void.
      */
     fun expandShortcuts(
         markdown: String,
@@ -188,172 +329,14 @@ object CblMarkdown {
             val candidates = glossaryPath.map { "$it$content" } + content
             candidates.firstOrNull { titleOf(it) != null } ?: candidates.first()
         }
-        if (bang.isNotEmpty()) {
-            // one bang embeds, two pin it open - passed through as written, so
-            // the embed pass is the only place that knows what they mean
-            "$bang[]($destination)"
-        } else {
-            val text = titleOf(destination)
-            if (text == null) "&#9888; *unresolved reference: `$content`*"
-            else "[$text]($destination)"
+        val text = titleOf(destination)
+        when {
+            // the embed form needs no link text - it shows the headline itself
+            bang.isNotEmpty() -> "![]($destination)"
+            text == null -> "&#9888; *unresolved reference: `$content`*"
+            else -> "[$text]($destination)"
         }
     }
-
-    /**
-     * Splice referenced block bodies into the markdown, BEFORE parsing - so
-     * embedded text gets full rendering and the image machinery never sees
-     * the fragment src. Depth-capped: an embed inside an embedded body renders
-     * as a plain note instead of recursing (cycle protection). The [resolve]
-     * callback receives the full destination ("#frag" or "path#frag");
-     * [expanded] decides per ref whether the body is spliced or folded to a
-     * title-only toggle line (Swing HTML has no <details> - the title is a
-     * TOGGLE_SCHEME link instead, default: everything expanded).
-     *
-     * An embed with TEXT IN FRONT OF IT on the same line is inline instead:
-     * see [inlineEmbed]. Position decides, not syntax, so nothing new has to
-     * be written for it.
-     */
-    fun resolveEmbeds(
-        markdown: String,
-        depth: Int = 0,
-        expanded: (String) -> Boolean = { true },
-        resolve: (String) -> Resolved?,
-    ): String {
-        // runs of two or more stand-alone embeds share one frame; a single one
-        // is left to the pass below, so its output is unchanged
-        val grouped = EMBED_RUN.replace(markdown) { run ->
-            val refs = EMBED.findAll(run.value)
-                .map { it.groupValues[1].isNotEmpty() to it.groupValues[2] }.toList()
-            if (refs.size < 2) run.value
-            else {
-                val entries = refs.map { (pinned, ref) -> entry(ref, depth, expanded, resolve, pinned) }
-                // a run of pinned entries is prose, not an insertion: no frame
-                if (entries.none { it.framed }) entries.joinToString("\n\n") { it.markdown }
-                else frame(entries.map { it.markdown })
-            }
-        }
-        return EMBED.replace(grouped) { match ->
-            val pinned = match.groupValues[1].isNotEmpty()
-            val ref = match.groupValues[2]
-            if (isInline(grouped, match.range.first)) {
-                inlineEmbed(ref, depth, expanded, resolve, pinned)
-            } else {
-                val entry = entry(ref, depth, expanded, resolve, pinned)
-                if (entry.framed) frame(listOf(entry.markdown)) else entry.markdown
-            }
-        }
-    }
-
-    /** True if something other than whitespace precedes [start] on its line -
-     *  i.e. the embed sits IN a sentence rather than on a line of its own. */
-    private fun isInline(text: String, start: Int): Boolean {
-        for (i in start - 1 downTo 0) {
-            val c = text[i]
-            if (c == '\n') return false
-            if (!c.isWhitespace()) return true
-        }
-        return false
-    }
-
-    /**
-     * An embed inside a sentence ("What prints `cout << v1`? ![#answer-x]"):
-     * the ref becomes its target's HEADLINE followed by the toggle arrow, right
-     * where it stands, and nothing else - no frame, no line break. The sentence
-     * keeps its shape and the reader can see what is behind the arrow before
-     * clicking. Which puts the burden where it belongs: a headline must not
-     * give away what the block answers, so answer blocks stay neutrally named
-     * (`## Answer 0x02-3`) or ask the question themselves.
-     *
-     * Unfolded, the arrow flips and the body follows in the usual frame
-     * directly below the paragraph - unheadlined, since the headline is already
-     * standing in the sentence above it. Inline the body cannot go: a glossary
-     * entry is block content (lists, tables, images), and Markdown has no way
-     * to put a block inside a paragraph. The frame is what terminates that
-     * paragraph, hence the trailing blank line - same contract as [frame]'s
-     * other callers.
-     */
-    private fun inlineEmbed(
-        ref: String,
-        depth: Int,
-        expanded: (String) -> Boolean,
-        resolve: (String) -> Resolved?,
-        pinned: Boolean = false,
-    ): String {
-        val resolved = resolve(ref) ?: return "&#9888; *unresolved reference: `$ref`*"
-        if (depth >= 1) return "*&#8230; see `$ref` (nested embed not expanded)*"
-        val title = titleText(resolved.block.title)
-        // plain, not bold: this sits mid-sentence, and the link colour marks it
-        val toggle = { arrow: String -> "[$title $arrow]($TOGGLE_SCHEME$ref)" }
-        if (!pinned && !expanded(ref)) return toggle("&#9656;")
-        val body = rebaseForeign(
-            resolveEmbeds(resolved.block.bodyLines.joinToString("\n"), depth + 1, expanded, resolve),
-            resolved,
-        )
-        // pinned: the headline stays, the arrow goes - there is nothing to click
-        val head = if (pinned) title else toggle("&#9662;")
-        // pinned text is not framed - see [entry] for the rule. The blank lines
-        // are what ends the sentence's paragraph, which the frame did before.
-        return if (pinned) "$head\n\n$body\n\n" else head + frame(listOf(body)) + "\n"
-    }
-
-    /**
-     * A block title as rendered text. Brackets are escaped - a title may
-     * legitimately contain them ("See [#acdf] for details"), and an unescaped
-     * one would end a link text early and leave the rest as prose. The escapes
-     * are inert everywhere else, so the same form serves headlines too.
-     */
-    private fun titleText(title: String): String = title.ifBlank { "(untitled)" }
-        .replace("[", "\\[").replace("]", "\\]")
-
-    /** One entry of an embed frame; [framed] is false for the degraded forms
-     *  (unresolved, nesting cap), which render as inline notes. */
-    private class Entry(val markdown: String, val framed: Boolean)
-
-    private fun entry(
-        ref: String,
-        depth: Int,
-        expanded: (String) -> Boolean,
-        resolve: (String) -> Resolved?,
-        pinned: Boolean = false,
-    ): Entry {
-        val resolved = resolve(ref)
-        return when {
-            resolved == null -> Entry("&#9888; *unresolved reference: `$ref`*", framed = false)
-            depth >= 1 -> Entry("*&#8230; see `$ref` (nested embed not expanded)*", framed = false)
-            // folded: title-only line, '▸' toggle link
-            !pinned && !expanded(ref) ->
-                Entry("[&#9656; **${titleText(resolved.block.title)}**]($TOGGLE_SCHEME$ref)", framed = true)
-            else -> {
-                val body = rebaseForeign(
-                    resolveEmbeds(resolved.block.bodyLines.joinToString("\n"), depth + 1, expanded, resolve),
-                    resolved,
-                )
-                /*
-                 * The rule for the rules: a FRAME marks text the reader let in -
-                 * an answer they unfolded, a definition they asked for - so it
-                 * has to be told apart from the prose around it. Pinned text was
-                 * never asked for and never folds: the author wrote it here and
-                 * keeps it elsewhere, so it should read as if it stood here,
-                 * with nothing but its headline to say where it comes from.
-                 */
-                val head = if (pinned) "**${titleText(resolved.block.title)}**"
-                else "[&#9662; **${titleText(resolved.block.title)}**]($TOGGLE_SCHEME$ref)"
-                Entry("$head\n\n$body", framed = !pinned)
-            }
-        }
-    }
-
-    /**
-     * The frame around one or more embed entries: a raw-HTML wrapper instead of
-     * '---' rules, because Swing's HRuleView paints black and ignores css
-     * margins. The div.embed class is styled by the notes pane's private
-     * stylesheet (thin gray top/bottom borders). CommonMark passes the HTML
-     * block through and renders the markdown in between normally (same pattern
-     * as <center> blocks). Entries inside share the frame, separated by a
-     * paragraph break only - no rule between them.
-     */
-    private fun frame(entries: List<String>): String =
-        "\n\n<div class='embed'>\n\n${entries.joinToString("\n\n")}\n\n</div>\n"
 
     /**
      * Rewrite the LINK destinations of an embedded foreign body so they point
@@ -376,7 +359,7 @@ object CblMarkdown {
                 destination.startsWith("#") -> "$path$destination"
                 "://" in destination || destination.startsWith("mailto:") ||
                     destination.startsWith("data:") || destination.startsWith("/") ||
-                    destination.startsWith(TOGGLE_SCHEME) -> destination
+                    destination.startsWith(SLOT_SCHEME) -> destination
                 else -> "$folder$destination"
             }
             "${match.groupValues[1]}$rebased)"

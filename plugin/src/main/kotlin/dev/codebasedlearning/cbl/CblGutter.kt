@@ -48,16 +48,25 @@ object CblGutter {
         val names = model.sections.mapTo(mutableSetOf()) { it.name }
         val text = editor.document.charsSequence
         var placed = 0
+        // one log line per section: which line each icon landed on, and which
+        // name the file does not contain at all. "N sections, M icons" alone
+        // never says WHICH section went missing, which is the only question
+        // worth asking when some of them have no icon.
+        val report = StringBuilder()
         for (name in names) {
             val index = anchorOffset(text, name, file)
-            if (index < 0) continue
+            if (index < 0) {
+                report.append("\n  '$name' -> not found in this file")
+                continue
+            }
             val line = editor.document.getLineNumber(index)
             val highlighter = editor.markupModel.addLineHighlighter(line, HighlighterLayer.LAST, null)
             highlighter.putUserData(CBL_GUTTER, true)
             highlighter.gutterIconRenderer = CblGutterIcon(project, name)
             placed++
+            report.append("\n  '$name' -> line ${line + 1}")
         }
-        CblConsole.log("gutter: ${names.size} section(s) ${names.sorted()}, $placed icon(s) placed")
+        CblConsole.log("gutter: ${names.size} section(s), $placed icon(s) placed$report")
     }
 
     private fun count(editor: Editor): Int =

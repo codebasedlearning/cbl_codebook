@@ -11,6 +11,26 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
 
+## [1.0.14] - 2026-08-05
+
+- Editing a line no longer shows a neighbouring block's notes: the caret is ignored while the model is older than the document, and the panel catches up when the re-parse lands.
+
+## [1.0.12] - 2026-08-05
+
+- A horizontal rule at the end of a Markdown block's body is dropped: it separates two sections of the file, so the last entry of a group no longer ends with a line its siblings do not have.
+- Embedded blocks are indented like opened ones - same step, no rule.
+
+## [1.0.11] - 2026-08-04
+
+- Two ref forms instead of three: `[#term]` is a link that unfolds the target in place (headline + ▸, click again to close), `![#term]` shows it always. `!!` is gone, and so is the peek pane.
+- A link inside an open block replaces that block instead of nesting another one under it; ⚐ opens the source in the editor, ✕ closes the block.
+- Every link occurrence has its own state, so two refs to the same term no longer toggle together.
+- Embedded and peeked sections are indented by the same step the outline uses, so borrowed text reads as borrowed.
+
+## [1.0.8] - 2026-08-03
+
+- Output gutter icons appear again on every function satisfying the pattern.
+
 ## [1.0.7] - 2026-08-03
 
 - Pinned embeds (`!![#term]`) render without a frame: text the author put here reads as prose, only the headline says where it is kept.

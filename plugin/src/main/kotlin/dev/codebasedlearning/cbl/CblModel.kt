@@ -308,10 +308,39 @@ object CblParser {
             offset = lineEnd + 1
         }
         blocks.forEachIndexed { i, block ->
+            dropTrailingRule(block)
             block.finish()
             block.endOffset = if (i + 1 < blocks.size) blocks[i + 1].startOffset - 1 else text.length
         }
         return CblModel(blocks)
+    }
+
+    /** `---`, `***`, `___` - a thematic break, three or more of one character. */
+    private val THEMATIC_BREAK = Regex("""^ {0,3}([-*_])[ \t]*(\1[ \t]*){2,}$""")
+
+    /**
+     * A horizontal rule at the END of a body is a separator between sections,
+     * not the last sentence of one. In a file that groups its entries -
+     *
+     *     *Seen in* `a_uniform_init.cpp`.
+     *
+     *     ---
+     *
+     *     ## Functions and control flow
+     *
+     * the rule belongs to the file's layout, but a heading's body reaches to
+     * the next heading and would take it along - so the LAST entry of every
+     * group ended with a thick line that none of its siblings had.
+     */
+    private fun dropTrailingRule(block: CblBlock) {
+        while (block.rawBody.isNotEmpty()) {
+            val last = block.rawBody.last()
+            if (last.isBlank() || THEMATIC_BREAK.matches(last)) {
+                block.rawBody.removeAt(block.rawBody.size - 1)
+            } else {
+                break
+            }
+        }
     }
 
     /**

@@ -213,35 +213,38 @@ An embed splices the target's text in (relative images are rebased to the
 foreign folder, and so are the links: a `[text](#other)` inside an embedded
 glossary entry means *that* glossary's `#other`).
 
-**Clicking** a ref into a Markdown file does not open that file — it shows the
-section in a **peek** frame below the notes, so a lookup costs neither a tab nor
-your place in the snippet. The same link closes it again, a link inside the peek
-replaces its content, and the ⚐ in the peek header opens the file in the editor
-when you really do want to go there. Refs into *code* files navigate as before:
-Markdown is reading material, code is where you work. Code files are read through the
-parser; **Markdown files have no comments, so ATX headings are the blocks
-there** — `## Code Style`, depth = heading level. Slugs equal GitHub's anchors,
-so the same links work when reading the repository online.
+**Clicking** a link does not open the file it points at — it unfolds the target
+*here*, in a **slot** below the line: a thin rule, the source and title in grey,
+and the section's text. A lookup costs neither a tab nor your place in the
+snippet. The same link closes it again, a link *inside* the slot replaces its
+content (lookups stay flat, however far a chain of definitions goes), and the ⚐
+in the slot header opens the file in the editor when you really do want to go
+there. A link WITHOUT a fragment — `[notes](notes/more.md)` — opens the file, as
+a link should.
+
+Code files are read through the parser; **Markdown files have no comments, so
+ATX headings are the blocks there** — `## Code Style`, depth = heading level.
+Slugs equal GitHub's anchors, so the same links work when reading the repository
+online.
 
 **Short forms** — brackets without parentheses — cover the glossary case that
 dominates in practice:
 
 ```
-[#main-guard]      reference; the link text is the target's title
-![#main-guard]     embed, folded until clicked
-!![#main-guard]    embed, pinned open
+[#main-guard]      a link: headline plus ▸, unfolds on click
+![#main-guard]     an embed: the text, always there
 ![../notes.md#tco] an explicit path still works
 ```
 
-The second `!` says *include this*, not *offer this*: same frame and headline,
-but no arrow and nothing to click — a transclusion of text that belongs here and
-is merely kept in one place, as opposed to a question the reader unfolds when
-they are ready. The fold state is not consulted at all, so Fold-all leaves it
-alone.
+One axis, two forms: **brackets mean "on demand", the bang means "shown"**. A
+link is a question, a glossary word, a *see also* — the reader decides. An embed
+is a passage the author wrote here and merely keeps elsewhere, so it reads as
+prose, with only its headline saying where it lives. There is no third form and
+no fold state to manage.
 
 A path-less fragment is looked up along `glossary.path` (see below), in order,
-the current file last. Both forms are valid CommonMark shortcut references, so
-a foreign renderer prints the literal text instead of mangling it.
+the current file last. Both forms are valid CommonMark, so a foreign renderer
+shows a link and a broken image respectively — never junk.
 
 **Labels** — a block can declare its own address, as a trailing anchor in the
 header:
@@ -261,41 +264,27 @@ form is valid HTML5, so write it closed for anything that leaves the IDE.
 longer does — the label *replaces* it, so rewording the heading cannot silently
 break or re-point a ref. The label is stripped from the title, so everything
 that shows a title shows the front part alone: the outline, the breadcrumb, the
-embed frame, and the link text of `[#acdf]`, which renders as
-[Background Const]. Headers without a `[#label]` keep addressing by title slug,
+embed's headline, and the link text of `[#acdf]`, which renders as
+[Background Const] ▸. Headers without an anchor keep addressing by title slug,
 exactly as before.
 
 ### Question blocks
 
 No extra syntax needed: put the answers in a second file on the path and write a
-one-liner whose body is a folded embed.
+one-liner whose body is a link.
 
 ```cpp
-/* ---- Why does this not compile? ---- ![#const-ref-answer] */
+/* ---- Why does this not compile? ---- [#const-ref-answer] */
+
+What prints `cout << v1`? [#answer-init-value]
 ```
 
-Embeds render **folded** by default, so the answer is one click away and,
-unlike a marker inside the snippet, genuinely not in the student's file. Name
-the answer sections neutrally (`## Answer 0x02-3`) — a folded embed on a line
-of its own shows its target's title, so `## Because m is const` would spoil
-itself.
-
-**Inline embeds:** an embed with text in front of it on the same line stays
-*in* that line — it renders as the target's headline followed by a `▸`, right
-where it stands, with no frame and no line break:
-
-```
-What prints `cout << v1`? ![#answer-init-value]
-```
-
-Clicking flips the arrow to `▾` and shows the body in the usual frame directly
-below the paragraph (block content cannot live inside a sentence); the frame
-carries no headline of its own, since it already stands in the sentence above.
-Position is the only difference between the two forms; there is no extra syntax.
-
-Which means the headline is what a reader sees before deciding to unfold — so
-it must not answer the question by itself. Either keep answers neutrally named
-(`## Answer 0x02-3`) or let the headline repeat the question.
+The link shows the target's headline and a `▸`; the answer appears only when the
+reader clicks, and — unlike a marker inside the snippet — is genuinely not in the
+student's file. Which puts the burden on the headline: it is what a reader sees
+before deciding to unfold, so it must not answer the question by itself. Either
+name answers neutrally (`## Answer 0x02-3`) or let the headline repeat the
+question.
 
 ## The tool window
 

@@ -249,8 +249,11 @@ show, read `plugin/build/patchedPluginXml/plugin.xml` after a build.
 ./gradlew :plugin:test
 ./gradlew :plugin:buildPlugin           # → codebook-x.y.z.zip
 ./gradlew :plugin:verifyPlugin          # Compatible, and no INTERNAL_API_USAGES
-git commit -am "release x.y.z"
-git tag -a vx.y.z -m "x.y.z" && git push --follow-tags
+# git commit -am "release x.y.z"
+# git tag -a vx.y.z -m "x.y.z" && git push --follow-tags
+# after release push
+git tag -a 1.0.6 -m "release 1.0.6"  
+git push origin 1.0.6
 export CERTIFICATE_CHAIN PRIVATE_KEY PRIVATE_KEY_PASSWORD PUBLISH_TOKEN
 ./gradlew :plugin:publishPlugin         # signs on the way out
 ```
