@@ -1,8 +1,8 @@
 # Answers and Background — Kotlin
 
 Answers or background information to the question blocks in the Kotlin snippets.
-Referenced by the short embed form, e.g. `![#background-companion-as-value]`,
-which renders folded in the panel.
+Referenced by the short fold form, e.g. `!![#background-companion-as-value]`,
+which shows only a headline and an arrow until the reader clicks.
 
 
 ## Background companion-not-on-instance

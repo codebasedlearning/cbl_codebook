@@ -1,8 +1,8 @@
 # Answers and Background — C++
 
 Answers or background information to the question blocks in the C++ snippets. 
-Referenced by the short embed form, e.g. `![#background-static-via-object]`, 
-which renders folded in the panel.
+Referenced by the short fold form, e.g. `!![#background-static-via-object]`,
+which shows only a headline and an arrow until the reader clicks.
 
 
 ## Background static-via-object

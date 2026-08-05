@@ -1,7 +1,7 @@
 # Answers — Python
 
 Answers to the question blocks in the Python snippets. Referenced by the short
-embed form, e.g. `![#answer-classmethod-vs-static]`, which renders folded in the
+fold form, e.g. `!![#answer-classmethod-vs-static]`, which shows a headline and an arrow in the
 panel — one click away, but not sitting in the source file.
 
 

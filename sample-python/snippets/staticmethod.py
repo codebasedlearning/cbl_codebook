@@ -7,7 +7,7 @@ This snippet discusses
 - what `@staticmethod` gives up, and what it buys
 - when `@classmethod` is the better answer
 
-![#decorator]
+!![#decorator]
 """
 
 from typing import Self
@@ -98,7 +98,7 @@ def why_cls_is_important():
     What if we do not use `return cls(...)` in `from_kelvin` but
     `return Temperature(...)`?
 
-    ![#answer-classmethod-vs-static]
+    !![#answer-classmethod-vs-static]
     """
 
     class Kelvin(Temperature):
@@ -114,9 +114,9 @@ def why_cls_is_important():
 """ ---- Run ---- 
 
 See also
-![#main-guard] 
-![#code-style] 
-![#pythonic-way]
+!![#main-guard] 
+!![#code-style] 
+!![#pythonic-way]
 """
 
 if __name__ == "__main__":

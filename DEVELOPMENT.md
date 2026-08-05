@@ -128,20 +128,20 @@ installed instead of letting uv fetch the pinned interpreter.
 ./gradlew :plugin:test
 ```
 
-No IDE window opens. 33 tests in two tiers, and the split is the point:
+No IDE window opens. 47 tests in two tiers, and the split is the point:
 
 | Suite | Kind | Subject |
 |---|---|---|
-| `CblRefsTest` (13) | plain JUnit | refs, short forms, embed framing, Markdown → HTML |
+| `CblRefsTest` (22) | plain JUnit | the three ref forms, labels, short forms, Markdown → HTML |
 | `CblConfigTest` (6) | plain JUnit | the `cbl.properties` cascade, its search bound, pattern validation |
 | `CblOutputModelTest` (2) | plain JUnit | output sections, line offsets |
-| `CblParserTest` (8) | fixture | the DSL against real PSI comment tokens |
+| `CblParserTest` (13) | fixture | the DSL against real PSI comment tokens |
 | `CblFoldingTest` (4) | fixture | body-only folding in a real editor |
 
 **Tested:** string-to-string logic where a regression is invisible to the eye —
-a regex that starts eating prose, an embed that swallows the blank line after
-its frame, a cascade that stops inheriting per key. These need no IDE, so they
-cost milliseconds, and 20 of the 31 are of this kind.
+a regex that starts eating prose, a ref form that swallows the blank line after
+its block, a cascade that stops inheriting per key. These need no IDE, so they
+cost milliseconds, and 30 of the 47 are of this kind.
 
 **Deliberately not tested:** anything a glance in the sandbox settles faster
 than an assertion — panel layout, colours, icons, gutter placement. That is what

@@ -3,7 +3,7 @@
 Shared definitions for the Kotlin snippets. In Markdown files the **headings are
 the blocks**: reference them from any snippet via `[#term]` (short form, the file
 comes from `glossary.path`), `[term](doc/glossary.md#term)` (explicit path) or
-`![#term]` to embed the section into the notes pane. Slugs match GitHub's own
+`!![#term]` to offer it as a fold, or `![#term]` to show it outright. Slugs match GitHub's own
 heading anchors, so these links also work when browsing the repository online.
 
 Language-specific on purpose: the Python and C++ projects have their own pairs

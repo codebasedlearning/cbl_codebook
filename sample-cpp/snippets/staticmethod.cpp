@@ -7,7 +7,7 @@
     - what `static` gives up, and what it buys
     - why C++ has no `@classmethod`, and what a [#named-constructor] replaces
 
-    ![#named-constructor]
+    !![#named-constructor]
  */
 
 #include <cstdlib>
@@ -88,7 +88,7 @@ private:
    object - the object is evaluated and then discarded, because there is no
    `this` to pass.
 
-   ![#background-static-via-object]
+   !![#background-static-via-object]
 
    Rule:
    - Does the callable need the object's data? -> A member function.
@@ -148,7 +148,7 @@ void three_meanings_of_static() {
    What if we call `from_kelvin` on a derived class - do we get a `Kelvin`
    back, the way Python's `@classmethod` would give us?
 
-   ![#answer-no-cls-in-cpp]
+   !![#answer-no-cls-in-cpp]
  */
 void why_there_is_no_cls() {
     print_function_header(__func__);
@@ -170,9 +170,9 @@ void why_there_is_no_cls() {
 /* ---- Run ----
 
    See also
-   ![#code-style]
-   ![#translation-unit]
-   ![#the-modern-way]
+   !![#code-style]
+   !![#translation-unit]
+   !![#the-modern-way]
  */
 
 int main() {

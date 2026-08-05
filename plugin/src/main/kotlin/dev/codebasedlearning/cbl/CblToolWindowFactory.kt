@@ -577,7 +577,7 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
         val block = foreignModel(file)?.blockByRef(fragment) ?: return null
         // the path as WRITTEN travels with the target: links inside the
         // embedded body are rewritten against it, so a click lands in the file
-        // that meant them (see CblMarkdown.rebaseLinks)
+        // that meant them (see CblMarkdown.rebaseForeign)
         return CblMarkdown.Resolved(block, java.io.File(file.parent.path), path)
     }
 

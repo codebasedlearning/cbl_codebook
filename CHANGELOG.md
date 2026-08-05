@@ -11,57 +11,51 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
 
-## [1.0.15] - 2026-08-05
+## [2.0.0] - 2026-08-05
 
-- Ordinary links navigate again, fragment or not; the foldable form moved to `!![#term]`. So: `[…]` links, `![…]` shows, `!![…]` offers.
+The reference syntax settled. One axis, three forms, and the panel reads as one
+document from the outline down to the last looked-up definition.
 
-## [1.0.14] - 2026-08-05
+### Refs
 
-- Editing a line no longer shows a neighbouring block's notes: the caret is ignored while the model is older than the document, and the panel catches up when the re-parse lands.
+- **Three forms, one per intention**: `[#term]` is an ordinary link and
+  navigates, `![#term]` shows the target's text where it stands, `!![#term]`
+  offers it behind a headline and a `▸`.
+- An opened fold appears in an indented block with a header: ⚐ opens the source
+  in the editor, ✕ closes it. A fold *inside* an open block replaces that block,
+  so a chain of lookups stays flat.
+- Every fold occurrence has its own state; two refs to the same term open and
+  close independently.
+- **Block labels**: a header ending in `<a id="term"></a>` is addressed by that
+  id instead of by its title slug, so rewording a heading cannot break a ref.
+  The anchor is stripped from the title and is invisible in every renderer.
+- Refs inside embedded or folded text resolve against the file they came from —
+  fragments, relative paths and images alike.
 
-## [1.0.12] - 2026-08-05
+### Blocks
 
-- A horizontal rule at the end of a Markdown block's body is dropped: it separates two sections of the file, so the last entry of a group no longer ends with a line its siblings do not have.
-- Embedded blocks are indented like opened ones - same step, no rule.
+- **Unlisted blocks**: a title starting with a dot (`---- .Setup ----`) is kept
+  out of the outline and the breadcrumb, and heads its own section in the notes.
+- A construct's opening line (`namespace {`, `class X {`, `def f():`) stays with
+  the CBL comment above it, if there is one.
+- Note bodies keep their relative indentation, so nested Markdown lists survive.
+- A horizontal rule at the end of a Markdown block's body belongs to the file's
+  layout, not to the block, and is dropped.
 
-## [1.0.11] - 2026-08-04
+### Panel
 
-- Three ref forms, one per intention: `[#term]` navigates as a link always did, `![#term]` shows the target's text, `!![#term]` folds it behind a ▸ until the reader clicks. The peek pane is gone.
-- A fold inside an open block replaces that block instead of nesting another one under it; ⚐ opens the source in the editor, ✕ closes the block.
-- Every fold occurrence has its own state, so two refs to the same term no longer toggle together.
-- Embedded and opened sections are indented by the same step the outline uses, so borrowed text reads as borrowed.
+- One line weight below the breadcrumb: a thin rule above each section, none at
+  the end of one. Borrowed text — embedded or folded — is indented by the same
+  step the outline uses.
+- Code blocks wrap instead of widening the whole pane; list items breathe; the
+  vertical scrollbar is always shown, so nothing re-wraps when it appears.
+- The outline keeps its selection while a program runs, and editing a line no
+  longer shows a neighbouring block's notes.
+- Output gutter icons appear after the first run of a session too.
 
-## [1.0.8] - 2026-08-03
+### Build
 
-- Output gutter icons appear again on every function satisfying the pattern.
-
-## [1.0.7] - 2026-08-03
-
-- Pinned embeds (`!![#term]`) render without a frame: text the author put here reads as prose, only the headline says where it is kept.
-- The peek frame has a ✕ in its header.
-- `<change-notes>` is generated from this file instead of being copied into `plugin.xml` by hand.
-
-## [1.0.6] - 2026-08-03
-
-- Markdown links open in a *peek* frame below the notes instead of in the editor; same link closes it, ⚐ opens the file, ✕ dismisses it.
-- Links inside an embedded body now resolve against the file they came from.
-
-## [1.0.4] - 2026-07-31
-
-- Pinned embeds: `!![#term]` includes a block outright, without a toggle.
-- Inline embeds show the target's headline before the `▸`.
-- Block labels: a header ending in `<a id="term"></a>` is addressed by that id instead of by its title slug.
-- Unlisted (dotted) blocks are skipped in the breadcrumb, and head their own section in the notes.
-- A construct's opening line stays with the CBL comment above it, if there is one.
-- Code blocks wrap instead of widening the whole notes pane.
-- Note bodies keep their relative indentation, so nested lists stay nested.
-- Outline and notes pane indent by the same amount per level; list items breathe.
-- The outline keeps its selection while a program runs.
-
-## [1.0.3] - 2026-07-31
-
-- Inline embeds: an embed with text before it on the same line stays in that line.
-- Dotted titles (`---- .Setup ----`) are unlisted.
+- `<change-notes>` is generated from this file by the Gradle Changelog Plugin.
 
 ## [1.0.2] - 2026-07-29
 

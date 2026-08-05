@@ -11,7 +11,7 @@
     definitions here - Kotlin has no docstring position, so this is the
     C-family form of the Python convention.
 
-    ![#companion-object]
+    !![#companion-object]
  */
 
 import utils.withFunctionHeader
@@ -104,7 +104,7 @@ fun callingFunctions() = withFunctionHeader("callingFunctions") {
        object: `t.isPlausible(20.0)` does not compile. The name lives in the
        companion, not in `Temperature`.
 
-       ![#background-companion-not-on-instance] */
+       !![#background-companion-not-on-instance] */
     println(" 4| explicit companion-> ${Temperature.Companion.isPlausible(20.0)}")
 }
 
@@ -119,7 +119,7 @@ fun theCompanionIsAnObject() = withFunctionHeader("theCompanionIsAnObject") {
        No `static` in any language does that. See also [#jvmstatic] for the case
        where you really do need a JVM static.
 
-       ![#background-companion-as-value] */
+       !![#background-companion-as-value] */
 
     // `Temperature` here is not the class - it is its companion object
     val factory: TemperatureFactory = Temperature
@@ -136,7 +136,7 @@ fun whyThereIsNoCls() = withFunctionHeader("whyThereIsNoCls") {
        What if we ask the factory for a `Kelvin` - do we get one, the way
        Python's `@classmethod` would give us?
 
-       ![#answer-no-cls-in-kotlin] */
+       !![#answer-no-cls-in-kotlin] */
 
     val t = Temperature.fromKelvin(300.0)
     println(" 1| fromKelvin(300)   -> ${t::class.simpleName}")
@@ -150,9 +150,9 @@ fun whyThereIsNoCls() = withFunctionHeader("whyThereIsNoCls") {
 /* ---- Run ----
 
    See also
-   ![#main-function]
-   ![#code-style]
-   ![#the-idiomatic-way]
+   !![#main-function]
+   !![#code-style]
+   !![#the-idiomatic-way]
  */
 
 fun main() {
