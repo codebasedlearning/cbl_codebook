@@ -62,9 +62,9 @@ project root, opened in the IDE that speaks its language, and each has its own
 nested `.idea/`, which keeps CLion and PyCharm away from the plugin project's
 config. All `.idea/` folders are gitignored, so the worst case is a re-import.
 
-Both cover the same topic (static methods) in the same shape — TOC, discussion,
-run, and a closing block about the panel itself — so the two panels can be read
-side by side. The glossaries are per language and share nothing.
+All three cover the same topic (static methods) in the same shape — TOC,
+discussion, run, and a closing block about the panel itself — so the panels can
+be read side by side. The glossaries are per language and share nothing.
 
 In IDEA, mark `sample-python/.venv/` as excluded so it is not indexed.
 
@@ -112,7 +112,7 @@ cd sample-cpp    && cmake -B cmake-build-debug && cmake --build cmake-build-debu
                  && ./cmake-build-debug/staticmethod
 ```
 
-`utils/` sits *inside* `snippets/` in both samples, which is what makes this
+`utils/` sits *inside* `snippets/` in all three samples, which is what makes this
 work: running a script puts the script's own directory on `sys.path` (and the
 C++ include path points at `snippets/` for the same reason), so `import utils`
 resolves from the command line exactly as it does in the IDE.
@@ -128,11 +128,11 @@ installed instead of letting uv fetch the pinned interpreter.
 ./gradlew :plugin:test
 ```
 
-No IDE window opens. 47 tests in two tiers, and the split is the point:
+No IDE window opens. 48 tests in two tiers, and the split is the point:
 
 | Suite | Kind | Subject |
 |---|---|---|
-| `CblRefsTest` (22) | plain JUnit | the three ref forms, labels, short forms, Markdown → HTML |
+| `CblRefsTest` (23) | plain JUnit | the three ref forms, labels, short forms, Markdown → HTML |
 | `CblConfigTest` (6) | plain JUnit | the `cbl.properties` cascade, its search bound, pattern validation |
 | `CblOutputModelTest` (2) | plain JUnit | output sections, line offsets |
 | `CblParserTest` (13) | fixture | the DSL against real PSI comment tokens |
@@ -141,7 +141,7 @@ No IDE window opens. 47 tests in two tiers, and the split is the point:
 **Tested:** string-to-string logic where a regression is invisible to the eye —
 a regex that starts eating prose, a ref form that swallows the blank line after
 its block, a cascade that stops inheriting per key. These need no IDE, so they
-cost milliseconds, and 30 of the 47 are of this kind.
+cost milliseconds, and 31 of the 48 are of this kind.
 
 **Deliberately not tested:** anything a glance in the sandbox settles faster
 than an assertion — panel layout, colours, icons, gutter placement. That is what

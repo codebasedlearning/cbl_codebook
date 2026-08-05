@@ -11,15 +11,20 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-08-05
+
+- References and embeds section in README updated.
+
 ## [2.1.0] - 2026-08-05
 
+Behaviour for (embedded) links settled.
 - One gesture vocabulary in the notes: a plain link opens its file, a fold's arrow toggles its block, a headline is link-coloured but inert — and ⌘/Ctrl-click on a headline or an arrow opens the source.
 - The opened block lost its header: no provenance line, no ✕. The arrow that opened it closes it — and once a click inside has replaced the content, the block heads itself with what it now shows.
 - Inside borrowed text — an embedded or unfolded body — a plain link is a lookup as well: it replaces the block it stands in, or opens its own under an embed. A glossary can cross-link itself in ordinary Markdown without knowing where it is cited, and the reader keeps their place; ⌘-click still opens the file.
 
 ## [2.0.0] - 2026-08-05
 
-The reference syntax settled. One axis, three forms, and the panel reads as one
+Major refactoring – the reference syntax nearly settled. One axis, three forms, and the panel reads as one
 document from the outline down to the last looked-up definition.
 
 ### Refs
@@ -44,19 +49,6 @@ document from the outline down to the last looked-up definition.
 - A construct's opening line (`namespace {`, `class X {`, `def f():`) stays with
   the CBL comment above it, if there is one.
 - Note bodies keep their relative indentation, so nested Markdown lists survive.
-- A horizontal rule at the end of a Markdown block's body belongs to the file's
-  layout, not to the block, and is dropped.
-
-### Panel
-
-- One line weight below the breadcrumb: a thin rule above each section, none at
-  the end of one. Borrowed text — embedded or folded — is indented by the same
-  step the outline uses.
-- Code blocks wrap instead of widening the whole pane; list items breathe; the
-  vertical scrollbar is always shown, so nothing re-wraps when it appears.
-- The outline keeps its selection while a program runs, and editing a line no
-  longer shows a neighbouring block's notes.
-- Output gutter icons appear after the first run of a session too.
 
 ### Build
 
@@ -93,7 +85,7 @@ upper bound; installs in every JetBrains IDE.
 - Topic outline of a file's dash-framed block comments, four levels by frame width.
 - Layered notes that follow the caret, with a breadcrumb over the bodies of the chain.
 - Markdown rendering of note bodies, GitHub-flavoured, images resolved relative to the source file.
-- Editor folding of the note body, leaving the frame line visible; fold-all acts on CBL comments only.
+- Editor folding of the note body.
 - References and embeds between blocks: `[text](#topic)` links, `![](#topic)` embeds, folded by default.
 - Cross-file references into other snippets or a Markdown glossary, where headings are the blocks.
 - Short reference forms `[#term]` and `![#term]`, resolved along a configurable `glossary.path`.

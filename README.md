@@ -190,28 +190,14 @@ inside a list makes it loose (paragraph gaps around every item).
 
 ## References and embeds
 
-Two forms, straight from Markdown, addressing other blocks by their title slug
-(lowercase, non-word runs → `-`, exactly like a GitHub heading anchor):
-
-```
-[the static method](#the-static-method)     a reference: click selects the block
-![](#the-static-method)                     an embed: the body is spliced in here
-```
+Blocks are addressed by their **title slug** — lowercase, non-word runs to `-`,
+exactly like a GitHub heading anchor — or by an explicit [label](#labels).
 
 A `:` separates a qualifying ancestor chain — `[code style](#final-remarks:code-style)`
 — whose segments must match a suffix of the target's real chain. Unqualified
-references resolve to the first title match in file order.
-
-**Cross-file:** `path#fragment`, relative to the current file.
-
-```
-[TCO](doc/glossary.md#tail-call-optimization)
-![](../doc/glossary.md#tail-call-optimization)
-```
-
-An embed splices the target's text in (relative images are rebased to the
-foreign folder, and so are the links: a `[text](#other)` inside an embedded
-glossary entry means *that* glossary's `#other`).
+references resolve to the first title match in file order. **Cross-file** refs
+carry a path: `[TCO](doc/glossary.md#tail-call-optimization)`, relative to the
+current file.
 
 **Three forms, three intentions** — the first is Markdown's own, the other two
 are this plugin's:
@@ -252,7 +238,8 @@ who cannot know where it will be cited; the reader, though, is in the middle of
 a snippet, and following that link to the file would cost them the context that
 made the entry worth reading. So: *links in your own text take you somewhere,
 links in borrowed text keep you where you are* — and ⌘-click is the way out when
-the file is what you actually want.
+the file is what you actually want. Everything in borrowed text is resolved
+against the file it came from: fragments, relative paths and images alike.
 
 A path-less fragment is looked up along `glossary.path` (see below), in order,
 the current file last. All three are valid CommonMark, so a foreign renderer
@@ -263,8 +250,9 @@ ATX headings are the blocks there** — `## Code Style`, depth = heading level.
 Slugs equal GitHub's anchors, so the same links work when reading the repository
 online.
 
-**Labels** — a block can declare its own address, as a trailing anchor in the
-header:
+### Labels
+
+A block can declare its own address, as a trailing anchor in the header:
 
 ```
 ## Background Const                     <a id="acdf"></a>
