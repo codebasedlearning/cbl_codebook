@@ -11,6 +11,11 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-08-05
+
+- Output gutter icons wait for the console to settle, not merely to be readable: a console still filling yielded only the sections printed so far, so the first function got an icon and the rest did not.
+- A path-less fragment is searched along `glossary.path` in every form, not only in the short ones — so `!![printed](#tco)` works where `!![#tco]` does, and an explicit link text no longer forces the path to be spelled out. Local blocks stay authoritative.
+
 ## [2.1.1] - 2026-08-05
 
 - References and embeds section in README updated.

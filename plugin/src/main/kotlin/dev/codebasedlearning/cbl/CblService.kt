@@ -134,12 +134,27 @@ class CblService(private val project: Project) : Disposable {
      * that printed nothing has no sections either, and retrying forever would
      * only burn EDT cycles.
      */
-    private fun refreshWhenConsoleReadable(attempt: Int = 0) {
+    private fun refreshWhenConsoleReadable(attempt: Int = 0, seen: Int = -1) {
         if (project.isDisposed) return
         refresh()
-        if (CblConsole.outputModel(project) != null || attempt >= 3) return
-        CblConsole.log("console not readable yet (attempt ${attempt + 1}) - ${CblConsole.describe(project)}")
-        consoleAlarm.addRequest({ refreshWhenConsoleReadable(attempt + 1) }, 150L * (attempt + 1) * 2)
+        val length = CblConsole.textLength(project)
+        // settled = readable AND unchanged since the previous attempt. Readable
+        // alone is not enough: a console that is still filling yields the
+        // sections printed SO FAR, and the gutter would then icon the first
+        // function and no other, with nothing scheduled to correct it.
+        if ((length != null && length == seen) || attempt >= 3) return
+        // only from the second attempt on: one retry is the normal case, more
+        // than one means the console is slow enough to be worth knowing about
+        if (attempt >= 1) {
+            CblConsole.log(
+                "console not settled (attempt ${attempt + 1}, length=$length, was=$seen)" +
+                    if (length == null) " - ${CblConsole.describe(project)}" else ""
+            )
+        }
+        consoleAlarm.addRequest(
+            { refreshWhenConsoleReadable(attempt + 1, length ?: -1) },
+            150L * (attempt + 1) * 2,
+        )
     }
 
     /** Must be called on the EDT (all our callers are). */

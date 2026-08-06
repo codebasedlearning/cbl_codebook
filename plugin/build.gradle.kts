@@ -12,7 +12,7 @@ plugins {
 }
 
 group = "dev.codebasedlearning"
-version = "2.1.1"
+version = "2.1.2"
 
 base {
     archivesName = "codebook"

@@ -570,15 +570,31 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
         if (hash < 0) return null
         val fragment = ref.substring(hash + 1)
         if (hash == 0) {
-            return service.model?.blockByRef(fragment)?.let { CblMarkdown.Resolved(it) }
+            /*
+             * A PATH-LESS fragment: this file first, then `glossary.path` - the
+             * same search the short forms do, so `!![printed](#tco)` and
+             * `!![#tco]` resolve alike and an explicit link text no longer
+             * forces the author to spell the path out. Local blocks stay
+             * authoritative: only a fragment that names nothing here reaches
+             * the glossary.
+             */
+            service.model?.blockByRef(fragment)?.let { return CblMarkdown.Resolved(it) }
+            for (candidate in glossaryPath()) {
+                resolveInFile(candidate, fragment)?.let { return it }
+            }
+            return null
         }
+        return resolveInFile(ref.substring(0, hash), fragment)
+    }
+
+    /** A fragment in the file at [path], relative to the current one. The path
+     *  as WRITTEN travels with the target: refs inside the borrowed body are
+     *  rewritten against it, so a click lands in the file that meant them
+     *  (see [CblMarkdown.rebaseForeign]). */
+    private fun resolveInFile(path: String, fragment: String): CblMarkdown.Resolved? {
         val dir = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.parent ?: return null
-        val path = ref.substring(0, hash)
         val file = dir.findFileByRelativePath(path) ?: return null
         val block = foreignModel(file)?.blockByRef(fragment) ?: return null
-        // the path as WRITTEN travels with the target: links inside the
-        // embedded body are rewritten against it, so a click lands in the file
-        // that meant them (see CblMarkdown.rebaseForeign)
         return CblMarkdown.Resolved(block, java.io.File(file.parent.path), path)
     }
 
@@ -607,10 +623,6 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
      * turned it into a slot link, which is the whole point of the model.
      */
     private fun openLink(target: String, toEditor: Boolean = false) {
-        // every click, verbatim: whether one arrives at all, and in what shape,
-        // is the difference between a rendering bug, a scheme that did not
-        // survive the Markdown pipeline, and a bug in the handling below
-        CblConsole.log("link clicked: '$target'")
         if (target.startsWith("http://") || target.startsWith("https://") || target.startsWith("mailto:")) {
             com.intellij.ide.BrowserUtil.browse(target)
             return
@@ -631,10 +643,17 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
         // this file's own blocks (select and, with follow-caret on, jump), or
         // into another file, at the block the fragment names.
         if (target.startsWith("#")) {
-            val block = service.model?.blockByRef(target.removePrefix("#")) ?: return
-            tocList.setSelectedValue(block, true)
-            showBlock(block)
-            if (followToggle.isSelected) navigateTo(block)
+            val block = service.model?.blockByRef(target.removePrefix("#"))
+            if (block != null) {
+                tocList.setSelectedValue(block, true)
+                showBlock(block)
+                if (followToggle.isSelected) navigateTo(block)
+                return
+            }
+            // not in this file: the same glossary-path fallback the renderer
+            // uses, so a path-less link opens the file that does have it
+            val resolved = resolveRefTarget(target) ?: return
+            resolved.path?.let { openInEditor("$it$target") }
             return
         }
         if (target.indexOf('#') > 0) {

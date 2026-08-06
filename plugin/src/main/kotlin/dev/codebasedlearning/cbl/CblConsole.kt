@@ -108,6 +108,14 @@ object CblConsole {
 
     private var cached: Cached? = null
 
+    /**
+     * How much text the console holds right now, or null when there is none to
+     * read. Two equal readings a moment apart mean the output has settled -
+     * which is what [CblGutter] needs, since it places its icons from whatever
+     * sections the text contains at that instant.
+     */
+    fun textLength(project: Project): Int? = editor(project)?.document?.textLength
+
     /** Parsed Run-console output, or null if there is no console text. */
     fun outputModel(project: Project): CblOutputModel? {
         val console = editor(project) ?: return null
@@ -161,6 +169,7 @@ object CblConsole {
             start, end, HighlighterLayer.SELECTION - 1, attributes, HighlighterTargetArea.EXACT_RANGE
         )
         console.putUserData(HIGHLIGHT, highlighter)
+        log("focusSection('$name'): line ${section.startLine + 1} of ${out.sections.size} section(s)")
         console.caretModel.moveToOffset(start)
         console.scrollingModel.scrollTo(console.offsetToLogicalPosition(start), ScrollType.CENTER)
         ToolWindowManager.getInstance(project).getToolWindow(ToolWindowId.RUN)?.show(null)

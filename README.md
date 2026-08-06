@@ -241,9 +241,17 @@ links in borrowed text keep you where you are* — and ⌘-click is the way out 
 the file is what you actually want. Everything in borrowed text is resolved
 against the file it came from: fragments, relative paths and images alike.
 
-A path-less fragment is looked up along `glossary.path` (see below), in order,
-the current file last. All three are valid CommonMark, so a foreign renderer
-shows a link, a broken image, and a literal `!` before a link — never junk.
+A **path-less fragment** — `#tco`, in any of the three forms, short or long — is
+looked up in the current file first and then along `glossary.path` (see below).
+So an explicit text needs no path either:
+
+```
+!![#tco]                  the target's headline as the text
+!![printed](#tco)         your own text, same lookup
+```
+
+All three forms are valid CommonMark, so a foreign renderer shows a link, a
+broken image, and a literal `!` before a link — never junk.
 
 Code files are read through the parser; **Markdown files have no comments, so
 ATX headings are the blocks there** — `## Code Style`, depth = heading level.

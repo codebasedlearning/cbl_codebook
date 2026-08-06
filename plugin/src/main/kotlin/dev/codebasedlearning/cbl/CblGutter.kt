@@ -29,6 +29,10 @@ object CblGutter {
 
     private val CBL_GUTTER = Key.create<Boolean>("cbl.gutter")
 
+    /** Last thing logged, so a refresh that changes nothing says nothing: the
+     *  gutter is re-applied on every file switch and every debounced edit. */
+    private var lastReport: String? = null
+
     fun apply(project: Project, editor: Editor, file: PsiFile? = null) {
         /*
          * Read BEFORE clearing, and keep what is on screen when there is nothing
@@ -41,7 +45,7 @@ object CblGutter {
          */
         val model = CblConsole.outputModel(project)
         if (model == null) {
-            CblConsole.log("gutter: no readable console, keeping ${count(editor)} icon(s) - ${CblConsole.describe(project)}")
+            report("gutter: no readable console, keeping ${count(editor)} icon(s) - ${CblConsole.describe(project)}")
             return
         }
         clear(editor)
@@ -52,11 +56,11 @@ object CblGutter {
         // name the file does not contain at all. "N sections, M icons" alone
         // never says WHICH section went missing, which is the only question
         // worth asking when some of them have no icon.
-        val report = StringBuilder()
+        val detail = StringBuilder()
         for (name in names) {
             val index = anchorOffset(text, name, file)
             if (index < 0) {
-                report.append("\n  '$name' -> not found in this file")
+                detail.append("\n  '$name' -> not found in this file")
                 continue
             }
             val line = editor.document.getLineNumber(index)
@@ -64,9 +68,16 @@ object CblGutter {
             highlighter.putUserData(CBL_GUTTER, true)
             highlighter.gutterIconRenderer = CblGutterIcon(project, name)
             placed++
-            report.append("\n  '$name' -> line ${line + 1}")
+            detail.append("\n  '$name' -> line ${line + 1}")
         }
-        CblConsole.log("gutter: ${names.size} section(s), $placed icon(s) placed$report")
+        report("gutter: ${names.size} section(s), $placed icon(s) placed$detail")
+    }
+
+    /** Log [message] unless it repeats the previous one verbatim. */
+    private fun report(message: String) {
+        if (message == lastReport) return
+        lastReport = message
+        CblConsole.log(message)
     }
 
     private fun count(editor: Editor): Int =
