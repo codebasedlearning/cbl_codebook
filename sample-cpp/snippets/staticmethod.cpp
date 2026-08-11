@@ -1,66 +1,73 @@
 // (C) A.Voß, a.voss@fh-aachen.de, info@codebasedlearning.dev
 
-/** ---- TOC ----
-
-    This snippet discusses
-    - `static` member functions – a plain function in a class's [#scope]
-    - what `static` gives up, and what it buys
-    - why C++ has no `@classmethod`, and what a [#named-constructor] replaces
-
-    !![#named-constructor]
+/* ---- Content ----
+ *
+ * Teaching Focus
+ * - `static` member functions – a plain function in a class's !![#scope]
+ * - What `static` gives up, and what it buys.
+ * - Why C++ has no `@classmethod`, and what a !![#named-constructor] replaces.
+ *
+ * Idea Codebook
+ * - We structured the code such that the main discussion points are shown
+ *   and navigable inside the Codebook-Window.
+ * - Answers to questions can be shown or hidden, same for definitions or
+ *   concepts such as !![#named-constructor].
+ * - Text is rendered, so you can also show some links
+ *   [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines)
+ *   or plain html <p>
+ *   <center><img src="../doc/Logo_CBL_2024_72.png" width="50"></center>
+ *
+ * See also
+ * - !![#code-style]
  */
+
+/* ---- Header ---- */
 
 #include <cstdlib>
 #include <iostream>
 
 #include "utils/printing.h"
-
 using std::cout, std::endl;
 
+/* ---- Discussion ---- */
 
-/* ---- `Temperature` - a class with two kinds of functions ----
-
-   `Temperature` carries one value and three callables that differ only in what
-   the compiler hands them as the (hidden) first argument:
-
-   | Kind                   | Hidden argument | Typical use                     |
-   |------------------------|-----------------|---------------------------------|
-   | member function        | `this`          | needs the object's data         |
-   | static member function | nothing         | helper that belongs to the type |
-   | [#named-constructor]   | nothing         | build an object, named clearly  |
-
-   Python has a third kind, `@classmethod`, which receives the class itself.
-   C++ has no equivalent.
+/* --- `Temperature` - A class with `static` functions. ---
+ *
+ * `Temperature` carries one value and three callables that differ only in what
+ * the compiler hands them as the (hidden) first argument:
+ * | Kind                   | Hidden argument | Typical use                     |
+ * |------------------------|-----------------|---------------------------------|
+ * | member function        | `this`          | needs the object's data         |
+ * | static member function | nothing         | helper that belongs to the type |
+ * | [#named-constructor]   | nothing         | build an object, named clearly  |
+ *
+ * Python has a third kind, `@classmethod`, which receives the class itself.
+ * C++ has no equivalent.
  */
-
 class Temperature {
 public:
     static constexpr double zero_celsius_in_kelvin = 273.15;
 
     explicit Temperature(double celsius) : celsius_{celsius} {}
 
-    /* --- `as_fahrenheit` – The member function ---
+    /* -- `as_fahrenheit` – The member function --
        It reads `celsius_`, so it needs an object - the hidden `this`.
 
        `const` promises not to modify it: the `this` pointer is
        `const Temperature*` inside.
      */
-    [[nodiscard]] double as_fahrenheit() const {
-        return celsius_ * 9.0 / 5.0 + 32.0;
-    }
+    [[nodiscard]] double as_fahrenheit() const { return celsius_ * 9.0 / 5.0 + 32.0; }
 
-    /* --- `from_kelvin` – The static named constructor ---
+    /* -- .`from_kelvin` – The static named constructor --
        A static member function that returns an object - what C++ uses where
        Python writes an alternative constructor as a `@classmethod`.
 
        Unlike Python's `cls`, it has no idea which class the call was written
        on.
      */
-    [[nodiscard]] static Temperature from_kelvin(double kelvin) {
-        return Temperature{kelvin - zero_celsius_in_kelvin};
-    }
+    [[nodiscard]] static Temperature from_kelvin(double kelvin) { return Temperature{kelvin - zero_celsius_in_kelvin}; }
 
-    /* --- `is_plausible` – The static member function ---
+    /* -- .`is_plausible` – The static member function --
        No `this`: an ordinary function that happens to live in the class's
        [#scope].
 
@@ -68,18 +75,13 @@ public:
        function it would compile to the same thing; written here it stays where
        a reader looks for it.
      */
-    [[nodiscard]] static bool is_plausible(double celsius) {
-        return -273.15 <= celsius && celsius <= 5000.0;
-    }
+    [[nodiscard]] static bool is_plausible(double celsius) { return -273.15 <= celsius && celsius <= 5000.0; }
 
     [[nodiscard]] double celsius() const { return celsius_; }
 
 private:
     double celsius_;
 };
-
-
-/* ---- Discussion ---- */
 
 /* --- `calling_functions` ---
    Note the call syntax via class or object or both.
@@ -143,7 +145,6 @@ void three_meanings_of_static() {
     }
 }
 
-
 /* --- `why_there_is_no_cls` ---
    What if we call `from_kelvin` on a derived class - do we get a `Kelvin`
    back, the way Python's `@classmethod` would give us?
@@ -153,7 +154,7 @@ void three_meanings_of_static() {
 void why_there_is_no_cls() {
     print_function_header(__func__);
 
-    /* -- Inheritance without `cls` --
+    /* -- .Inheritance without `cls` --
        A derived class inherits static member functions, so `Kelvin::is_plausible`
        compiles - but `from_kelvin` still constructs a `Temperature`, because
        nothing tells it where the call was written.
@@ -166,14 +167,7 @@ void why_there_is_no_cls() {
     cout << " 2| Kelvin::from_kelvin(300)    -> " << Kelvin::from_kelvin(300.0).celsius() << endl;
 }
 
-
-/* ---- Run ----
-
-   See also
-   !![#code-style]
-   !![#translation-unit]
-   !![#the-modern-way]
- */
+/* ---- Run ---- */
 
 int main() {
     calling_functions();
@@ -182,18 +176,3 @@ int main() {
 
     return EXIT_SUCCESS;
 }
-
-
-/* ---- Codebook ----
-
-   In this snippet we structured the code such that the main discussion
-   points are shown and navigable inside the Codebook-Window.
-
-   Answers to questions can be shown or hidden, same for definitions or
-   concepts such as 'Named Constructor'.
-
-   In fact, text is rendered, so you can also show some links
-   [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines)
-   or html
-   <center><img src="../doc/Logo_CBL_2024_72.png" width="100"></center>
- */

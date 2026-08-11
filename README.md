@@ -22,8 +22,9 @@ to the code it explains. The plugin renders that structure instead of letting
 it compete with the code for screen space.
 
 One zip installs in every JetBrains IDE. The plugin uses no language-specific
-API — it reads the comment tokens the IDE already produces, so it works
-wherever the IDE understands the language (C++, Python, Kotlin, …).
+API—it reads the comment tokens the IDE already produces. 
+It may therefore work with any language the IDE understands; it is currently 
+tested with C++, Python, and Kotlin, with more to come.
 
 ### Output Selection
 
