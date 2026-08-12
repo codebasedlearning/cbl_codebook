@@ -35,6 +35,7 @@ using std::cout, std::endl;
  *
  * `Temperature` carries one value and three callables that differ only in what
  * the compiler hands them as the (hidden) first argument:
+ *
  * | Kind                   | Hidden argument | Typical use                     |
  * |------------------------|-----------------|---------------------------------|
  * | member function        | `this`          | needs the object's data         |
@@ -51,10 +52,8 @@ public:
     explicit Temperature(double celsius) : celsius_{celsius} {}
 
     /* -- `as_fahrenheit` – The member function --
-       It reads `celsius_`, so it needs an object - the hidden `this`.
-
-       `const` promises not to modify it: the `this` pointer is
-       `const Temperature*` inside.
+     * It reads `celsius_`, so it needs an object - the hidden `this`. <p>
+     * `const` promises not to modify it: the `this` pointer is `const Temperature*` inside.
      */
     [[nodiscard]] double as_fahrenheit() const { return celsius_ * 9.0 / 5.0 + 32.0; }
 
@@ -84,22 +83,20 @@ private:
 };
 
 /* --- `calling_functions` ---
-   Note the call syntax via class or object or both.
-
-   A static member function is reachable through the class and through an
-   object - the object is evaluated and then discarded, because there is no
-   `this` to pass.
-
-   !![#background-static-via-object]
-
-   Rule:
-   - Does the callable need the object's data? -> A member function.
-   - Does it need neither the object nor its type? -> `static`.
-   - Does it build an object and deserve a name? -> A named constructor.
-
-   Code:
-   - `as_fahrenheit` needs `this`
-   - `is_plausible` needs nothing - it only reads its argument
+ * Note the call syntax via class or object or both. <p>
+ * A static member function is reachable through the class and through an
+ * object - the object is evaluated and then discarded, because there is no
+ * `this` to pass.
+ * - !![#background-static-via-object]
+ *
+ * Rule:
+ * - Does the callable need the object's data? -> A member function.
+ * - Does it need neither the object nor its type? -> `static`.
+ * - Does it build an object and deserve a name? -> A named constructor.
+ *
+ * Code:
+ * - `as_fahrenheit` needs `this`
+ * - `is_plausible` needs nothing - it only reads its argument
  */
 void calling_functions() {
     print_function_header(__func__);
