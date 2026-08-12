@@ -11,6 +11,11 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-08-12
+
+- README adapted in all three sample projects and the main plugin project
+- TECHNICAL.md added
+
 ## [2.1.2] - 2026-08-05
 
 - Output gutter icons wait for the console to settle, not merely to be readable: a console still filling yielded only the sections printed so far, so the first function got an icon and the rest did not.
