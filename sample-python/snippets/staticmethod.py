@@ -1,22 +1,35 @@
 # (C) A.Voß, a.voss@fh-aachen.de, info@codebasedlearning.dev
 
-""" ---- TOC ----
+""" ---- Content ----
 
-This snippet discusses
-- `@staticmethod` – a [#decorator] for a plain function in a class
-- what `@staticmethod` gives up, and what it buys
-- when `@classmethod` is the better answer
+Teaching Focus
+- `@staticmethod` – a !![#decorator] for a plain function in a class.
+- What `@staticmethod` gives up, and what it buys.
+- When `@classmethod` is the better answer.
 
-!![#decorator]
+Idea Codebook
+- In this snippet we structured the code such that the main discussion
+  points are shown and navigable inside the Codebook-Window.
+- Answers to questions can be shown or hidden, same for definitions or
+  concepts such as 'Decorator'.
+- In fact, text is rendered, so you can also show some links
+  [PEP 8 - Style Guide for Python Code](https://peps.python.org/pep-0008)
+  or html <p>
+  <center><img src="../doc/Logo_CBL_2024_72.png" width="100"></center>
+
+See also
+- !![#decorator]
 """
 
-from typing import Self
+""" ---- Header ---- """
 
+from typing import Self
 from utils import print_function_header
 
+""" ---- Discussion ---- """
 
 class Temperature:
-    """ ---- `Temperature` - a class with all three kinds of functions ----
+    """ --- `Temperature` - A class with all three kinds of functions. ---
 
     `Temperature` carries one value and three callables that differ only in what
     Python hands them as the first argument:
@@ -34,13 +47,13 @@ class Temperature:
         self.celsius = celsius
 
     def as_fahrenheit(self) -> float:
-        """ --- `as_fahrenheit` – The instance method ---
+        """ -- `as_fahrenheit` – The instance method --
         It reads `self.celsius`, so it needs an object `self`. """
         return self.celsius * 9 / 5 + 32
 
     @classmethod
     def from_kelvin(cls, kelvin: float) -> Self:
-        """ --- `from_kelvin` – The class method ---
+        """ -- .`from_kelvin` – The class method --
         It constructs an instance via `cls`.
 
         `cls` is the class the call was made on, so a subclass gets *its* own
@@ -50,7 +63,7 @@ class Temperature:
 
     @staticmethod
     def is_plausible(celsius: float) -> bool:
-        """ --- `is_plausible` – The static method ---
+        """ -- .`is_plausible` – The static method --
         No `self`, no `cls`: a plain function in the class's [#namespace].
 
         It validates a value without needing any object at all. Written as a
@@ -58,9 +71,6 @@ class Temperature:
         reader looks for it.
         """
         return -273.15 <= celsius <= 5000.0
-
-
-""" ---- Discussion ---- """
 
 @print_function_header
 def calling_functions():
@@ -95,10 +105,8 @@ def calling_functions():
 def why_cls_is_important():
     """ --- `why_cls_is_important` ---
 
-    What if we do not use `return cls(...)` in `from_kelvin` but
-    `return Temperature(...)`?
-
-    !![#answer-classmethod-vs-static]
+    !![What if we do not use `return cls(...)` in `from_kelvin` but
+    `return Temperature(...)`?](#a-001)
     """
 
     class Kelvin(Temperature):
@@ -110,30 +118,13 @@ def why_cls_is_important():
     k = Kelvin.from_kelvin(300.0)
     print(f" 2| Kelvin.from_kelvin type  -> {type(k).__name__=}")
 
-
-""" ---- Run ---- 
-
-See also
-!![#main-guard] 
-!![#code-style] 
-!![#pythonic-way]
-"""
+""" ---- Run ---- """
 
 if __name__ == "__main__":
+    """ --- `main` ---
+    - !![#main-guard]
+    - !![#code-style]
+    - !![#pythonic-way]
+    """
     calling_functions()
     why_cls_is_important()
-
-
-""" ---- Codebook ---- 
-
-In this snippet we structured the code such that the main discussion
-points are shown and navigable inside the Codebook-Window.
-
-Answers to questions can be shown or hidden, same for definitions or
-concepts such as 'Decorator'.
-
-In fact, text is rendered, so you can also show some links
-[PEP 8 - Style Guide for Python Code](https://peps.python.org/pep-0008)
-or html
-<center><img src="../doc/Logo_CBL_2024_72.png" width="100"></center>
-"""

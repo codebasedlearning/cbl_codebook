@@ -14,9 +14,9 @@ happen), then discarded. The language allows it so that the call syntax does not
 have to change when a member function is made `static`.
 
 
-## Answer no-cls-in-cpp
+## A-001                                    <a id="a-001"></a>
 
-No. `from_kelvin` names the type it constructs, and a static member function
+`from_kelvin` names the type it constructs, and a static member function
 receives nothing that says which class the call was *written* on.
 `Kelvin::from_kelvin` and `Temperature::from_kelvin` are the same function, so
 both return a `Temperature`. Python's `@classmethod` receives that missing

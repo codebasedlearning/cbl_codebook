@@ -5,7 +5,7 @@ fold form, e.g. `!![#answer-classmethod-vs-static]`, which shows a headline and 
 panel — one click away, but not sitting in the source file.
 
 
-## Answer classmethod-vs-static
+## A-001                <a id="a-001"></a>
 
 Ask what the callable must know. `from_kelvin` has to build an object of the
 class it was called on, so it needs `cls` — with `Temperature(...)` hardcoded,

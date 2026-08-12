@@ -15,7 +15,7 @@
  * - Text is rendered, so you can also show some links
  *   [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines)
  *   or plain html <p>
- *   <center><img src="../doc/Logo_CBL_2024_72.png" width="50"></center>
+ *   <center><img src="../docs/Logo_CBL_2024_72.png" width="50"></center>
  *
  * See also
  * - !![#code-style]
@@ -118,10 +118,10 @@ void calling_functions() {
 static int file_local_calls = 0;
 
 /* --- `three_meanings_of_static` ---
-   We have
-   - internal linkage – not visible to other [#translation-unit]s
-   - function-local – initialized once, on first use, and outlives the call
-   - class member – belongs to the class, not to an object
+ * We have
+ * - internal linkage – not visible to other [#translation-unit]s
+ * - function-local – initialized once, on first use, and outlives the call
+ * - class member – belongs to the class, not to an object
  */
 void three_meanings_of_static() {
     print_function_header(__func__);
@@ -143,18 +143,16 @@ void three_meanings_of_static() {
 }
 
 /* --- `why_there_is_no_cls` ---
-   What if we call `from_kelvin` on a derived class - do we get a `Kelvin`
-   back, the way Python's `@classmethod` would give us?
-
-   !![#answer-no-cls-in-cpp]
+ * Assume we call `from_kelvin` on a derived class. <br>
+ * !![What is the type?](#a-001)
  */
 void why_there_is_no_cls() {
     print_function_header(__func__);
 
     /* -- .Inheritance without `cls` --
-       A derived class inherits static member functions, so `Kelvin::is_plausible`
-       compiles - but `from_kelvin` still constructs a `Temperature`, because
-       nothing tells it where the call was written.
+     * A derived class inherits static member functions, so `Kelvin::is_plausible`
+     * compiles - but `from_kelvin` still constructs a `Temperature`, because
+     * nothing tells it where the call was written.
      */
     struct Kelvin : Temperature {
         using Temperature::Temperature;
