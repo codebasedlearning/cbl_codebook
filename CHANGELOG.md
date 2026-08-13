@@ -1,3 +1,5 @@
+[© A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen](https://ami.codebasedlearning.dev)
+
 # Changelog
 
 All notable changes to **Codebook** are documented here. The format follows
@@ -10,6 +12,10 @@ build's version. `./gradlew patchChangelog` promotes *Unreleased* to that
 version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
+
+## [2.2.0] - 2026-08-13
+
+- Copyright note edited, redirect to AMI @ FH Aachen added
 
 ## [2.1.4] - 2026-08-12
 

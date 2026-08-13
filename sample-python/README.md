@@ -1,3 +1,5 @@
+[© A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen](https://ami.codebasedlearning.dev)
+
 # Python samples — Codebook
 
 A [uv](https://docs.astral.sh/uv/) project. Open this folder in PyCharm (it is a

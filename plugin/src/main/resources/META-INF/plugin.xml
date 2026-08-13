@@ -4,15 +4,16 @@
     <vendor email="info@codebasedlearning.dev" url="https://www.codebasedlearning.dev">codebasedlearning</vendor>
 
     <description><![CDATA[
-        A JetBrains IDE plugin (CLion, PyCharm, IntelliJ IDEA) for
-        code-based-learning courses: it turns didactic comments in course snippets
-        into a structured side panel — and folds them away in the editor, so the
-        code stays readable while the prose stays available.
+        This is a JetBrains IDE plugin for teaching and learning programming at a code
+        level. <p>
+        The plugin converts didactic comments in code snippets into a structured side panel
+        and folds them away in the editor, ensuring the code remains readable while the
+        prose remains accessible. <br>
+        The side panel also provides access to further information, such as glossary entries
+        or answers to questions. This helps to focus on the discussion at hand while
+        simultaneously providing access to additional resources.
         <br/><br/>
         See README for details.
-        <br/><br/>
-        Built for the code-based-learning courses at
-        <a href="https://www.codebasedlearning.dev">codebasedlearning.dev</a>.
     ]]></description>
 
     <!-- No <change-notes> here on purpose: it is GENERATED from CHANGELOG.md

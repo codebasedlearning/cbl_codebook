@@ -1,3 +1,5 @@
+[© A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen](https://ami.codebasedlearning.dev)
+
 # Answers and Background — Kotlin
 
 Answers or background information to the question blocks in the Kotlin snippets.

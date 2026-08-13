@@ -1,3 +1,5 @@
+[© A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen](https://ami.codebasedlearning.dev)
+
 # Answers — Python
 
 Answers to the question blocks in the Python snippets. Referenced by the short

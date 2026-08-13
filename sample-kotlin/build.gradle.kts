@@ -1,3 +1,5 @@
+// (C) A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen – https://ami.codebasedlearning.dev
+
 plugins {
     kotlin("jvm") version "2.4.0"
     application

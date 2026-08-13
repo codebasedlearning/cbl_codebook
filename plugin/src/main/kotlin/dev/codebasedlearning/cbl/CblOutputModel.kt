@@ -1,4 +1,4 @@
-// (C) 2026 A.Voß, a.voss@fh-aachen.de, info@codebasedlearning.dev
+// (C) A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen – https://ami.codebasedlearning.dev
 
 package dev.codebasedlearning.cbl
 

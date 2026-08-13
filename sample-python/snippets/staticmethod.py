@@ -1,4 +1,4 @@
-# (C) A.Voß, a.voss@fh-aachen.de, info@codebasedlearning.dev
+# (C) A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen – https://ami.codebasedlearning.dev
 
 """ ---- Content ----
 
@@ -15,7 +15,7 @@ Idea Codebook
 - In fact, text is rendered, so you can also show some links
   [PEP 8 - Style Guide for Python Code](https://peps.python.org/pep-0008)
   or html <p>
-  <center><img src="../doc/Logo_CBL_2024_72.png" width="100"></center>
+  <center><img src="../docs/Logo_CBL_2024_72.png" width="50"></center>
 
 See also
 - !![#decorator]

@@ -1,3 +1,5 @@
+[© A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen](https://ami.codebasedlearning.dev)
+
 # Glossary — Kotlin
 
 Shared definitions for the Kotlin snippets. In Markdown files the **headings are

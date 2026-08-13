@@ -1,3 +1,5 @@
+[© A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen](https://ami.codebasedlearning.dev)
+
 # Development guide — Codebook
 
 Building, testing, signing and publishing the plugin. For what Codebook *does*,

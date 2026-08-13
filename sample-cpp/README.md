@@ -1,3 +1,5 @@
+[© A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen](https://ami.codebasedlearning.dev)
+
 # C++ samples — Codebook
 
 A standalone CMake project. Open this folder in CLion (it is a project root of

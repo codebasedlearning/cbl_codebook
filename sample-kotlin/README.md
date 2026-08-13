@@ -1,3 +1,5 @@
+[© A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen](https://ami.codebasedlearning.dev)
+
 # Kotlin samples — Codebook
 
 A standalone Gradle build. Open this folder in IntelliJ IDEA (it is a project

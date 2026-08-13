@@ -1,3 +1,5 @@
+# (C) A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen – https://ami.codebasedlearning.dev
+
 # The C++ sample project
 cmake_minimum_required(VERSION 3.20)
 project(cbl_sample_cpp CXX)

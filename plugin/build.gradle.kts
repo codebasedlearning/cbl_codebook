@@ -1,3 +1,5 @@
+// (C) A.Voß – codebasedlearning.dev – Study Maths and Computer Science (AMI) with us @ FH Aachen – https://ami.codebasedlearning.dev
+
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
@@ -12,7 +14,7 @@ plugins {
 }
 
 group = "dev.codebasedlearning"
-version = "2.1.4"
+version = "2.2.0"
 
 base {
     archivesName = "codebook"
