@@ -13,4 +13,5 @@ target_include_directories(utils INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/snippets)
 
 # One executable per snippet
 add_executable(staticmethod snippets/staticmethod.cpp)
+add_executable(template snippets/template.cpp)
 target_link_libraries(staticmethod PRIVATE utils)

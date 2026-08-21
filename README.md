@@ -97,6 +97,8 @@ Three self-contained sample projects
 cover the same topic (static methods) on purpose, so the panel can be compared
 across languages. Glossaries are per language, so nothing has to stay in sync.
 
+Writing your own snippets: see [AUTHORING.md](AUTHORING.md).
+
 
 ## License
 

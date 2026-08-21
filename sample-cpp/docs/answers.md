@@ -28,3 +28,7 @@ information as `cls`, which is precisely why `Kelvin.from_kelvin(...)` returns a
 The C++ ways to get the same effect are explicit: a template parameter
 (`template <class T> static T from_kelvin(...)`), CRTP, or simply a named
 constructor per class.
+
+## A-002                                    <a id="a-002"></a>
+
+No, under the hood it is the same call.

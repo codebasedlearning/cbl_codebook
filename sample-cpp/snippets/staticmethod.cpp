@@ -103,15 +103,17 @@ void calling_functions() {
 
     const Temperature t{20.0};
 
-    // call via object `t`
+    /* -- .call via object `t` -- */
     cout << " 1| as_fahrenheit()   -> " << t.as_fahrenheit() << endl;
 
-    // call via class `Temperature`
+    /* -- .call via class `Temperature` -- */
     cout << " 2| from_kelvin(300)  -> " << Temperature::from_kelvin(300.0).celsius() << endl;
 
-    // both calls valid
+    /* -- .both calls valid -- */
     cout << " 3| via class         -> " << Temperature::is_plausible(20.0) << endl;
     cout << " 4| via object        -> " << t.is_plausible(20.0) << endl;
+
+    /* -- .Is there a difference in calling `is_plausible`? -- !![#a-002] */
 }
 
 // internal linkage, see below

@@ -2,6 +2,9 @@
 
 # Codebook Technical
 
+This document explains what the syntax *means*; for how a snippet is best
+*built up*, see [AUTHORING.md](AUTHORING.md).
+
 ## Writing blocks
 
 A **CBL block** is a *block comment* whose first non-blank interior line is a

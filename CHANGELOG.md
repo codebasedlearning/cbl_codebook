@@ -13,6 +13,10 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-08-21
+
+- AUTHORING.md guideline added
+
 ## [2.2.0] - 2026-08-13
 
 - Copyright note edited, redirect to AMI @ FH Aachen added
