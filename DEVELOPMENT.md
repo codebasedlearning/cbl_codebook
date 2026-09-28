@@ -39,13 +39,13 @@ cbl_codebook/
 ├── sample-cpp/                  ← open in CLion   (CMake)
 │   ├── snippets/                   one file, one topic, one executable
 │   │   └── utils/                  header-only helpers
-│   ├── doc/                        glossary.md, answers.md, images
+│   ├── docs/                       glossary.md, answers.md, images
 │   └── cbl.properties              the fully documented reference
 ├── sample-python/               ← open in PyCharm (uv project)
-│   ├── snippets/  snippets/utils/  doc/
+│   ├── snippets/  snippets/utils/  docs/
 │   └── cbl.properties
 └── sample-kotlin/               ← open in IDEA    (own Gradle build)
-    ├── snippets/  snippets/utils/  doc/
+    ├── snippets/  snippets/utils/  docs/
     ├── settings.gradle.kts  build.gradle.kts
     └── cbl.properties
 ```
