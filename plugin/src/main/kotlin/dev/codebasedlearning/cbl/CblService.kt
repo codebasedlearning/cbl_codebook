@@ -13,8 +13,10 @@ import com.intellij.openapi.editor.event.CaretEvent
 import com.intellij.openapi.editor.event.CaretListener
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.EditorKind
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
@@ -49,7 +51,22 @@ class CblService(private val project: Project) : Disposable {
      * while a line was being edited, and put the right one back on the next
      * keystroke, when the re-parse had caught up.
      */
-    private fun isStale(): Boolean = modelEditor?.document?.modificationStamp != modelStamp
+    fun isStale(): Boolean = modelEditor?.document?.modificationStamp != modelStamp
+
+    /** The document [model] describes, or null without an editor. */
+    val modelDocument: Document? get() = modelEditor?.document
+
+    /**
+     * Hand the current caret position to the caret listeners, as if the caret
+     * had just moved - for whoever starts following it again. Says nothing
+     * while the model is stale; the pending re-parse reports the caret itself.
+     */
+    fun syncCaret() {
+        val editor = modelEditor ?: return
+        if (isStale()) return
+        val offset = editor.caretModel.offset
+        caretListeners.forEach { it(offset) }
+    }
 
     private val modelListeners = mutableListOf<() -> Unit>()
     private val caretListeners = mutableListOf<(Int) -> Unit>()
@@ -98,12 +115,24 @@ class CblService(private val project: Project) : Disposable {
          * Hence the filter: only the editor the model was parsed from speaks
          * for the model. Same for document changes - console output must not
          * trigger a re-parse of the source file every 700ms.
+         *
+         * One exception, and it is the same document: a SPLIT of the file the
+         * model was parsed from. Its offsets mean exactly what the model's do,
+         * and switching between two splits of one file fires no selection
+         * change - so the caret listener is the only one who notices that the
+         * reader has moved over, and it takes the editor along.
          */
         val multicaster = EditorFactory.getInstance().eventMulticaster
         multicaster.addCaretListener(object : CaretListener {
             override fun caretPositionChanged(event: CaretEvent) {
-                if (event.editor !== modelEditor || isStale()) return
-                caretListeners.forEach { it(event.editor.caretModel.offset) }
+                val editor = event.editor
+                if (editor !== modelEditor) {
+                    if (editor.document !== modelEditor?.document ||
+                        editor.editorKind != EditorKind.MAIN_EDITOR) return
+                    modelEditor = editor
+                }
+                if (isStale()) return
+                caretListeners.forEach { it(editor.caretModel.offset) }
             }
         }, this)
         multicaster.addDocumentListener(object : DocumentListener {
@@ -173,8 +202,13 @@ class CblService(private val project: Project) : Disposable {
             val parsed = CblParser.parse(psiFile, CblConfig.forSelectedFile(project).levelPatterns)
             model = parsed
             modelStamp = editor.document.modificationStamp
-            CblFolding.apply(editor, parsed)
-            CblGutter.apply(project, editor, psiFile)
+            // every editor of this document, not just the selected one: a
+            // split view shows the same file, and used to show it without fold
+            // regions and without gutter icons
+            for (each in editorsOf(editor)) {
+                CblFolding.apply(each, parsed)
+                CblGutter.apply(project, each, psiFile)
+            }
             modelListeners.forEach { it() }
             // the caret was ignored while the model was stale, so the panel may
             // be a few keystrokes behind: catch it up now that the offsets mean
@@ -182,6 +216,13 @@ class CblService(private val project: Project) : Disposable {
             val offset = editor.caretModel.offset
             caretListeners.forEach { it(offset) }
         }
+    }
+
+    /** [editor] plus the other main editors (splits) showing its document. */
+    private fun editorsOf(editor: Editor): List<Editor> {
+        val others = EditorFactory.getInstance().getEditors(editor.document, project)
+            .filter { it !== editor && it.editorKind == EditorKind.MAIN_EDITOR }
+        return listOf(editor) + others
     }
 
     override fun dispose() {

@@ -5,16 +5,17 @@ import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginSignatureTask
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.4.0"
-    id("org.jetbrains.intellij.platform") version "2.18.1"
+    id("org.jetbrains.intellij.platform") version "2.20.1"
     id("org.jetbrains.changelog") version "2.5.0" // feed plugin.xml automatically
 }
 
 group = "dev.codebasedlearning"
-version = "2.2.1"
+version = "2.2.2"
 
 base {
     archivesName = "codebook"
@@ -115,7 +116,9 @@ tasks.named<Zip>("buildPlugin") {
 }
 
 /*
- * Works around a bug in IPGP 2.18.1, not in our setup.
+ * Works around a bug seen in IPGP 2.18.1, not in our setup. NOT re-tested since
+ * the bump to 2.20.1 - the 2.19.0 notes mention signature-verification fixes,
+ * so try `verifyPluginSignature` without this block and delete it if it passes.
  *
  * VerifyPluginSignatureTask builds the CLI arguments from `certificateChain`
  * (the CONTENT, which is what signing reads from CERTIFICATE_CHAIN) like this:
@@ -142,6 +145,16 @@ kotlin {
 
     compilerOptions {
         jvmDefault = JvmDefaultMode.NO_COMPATIBILITY
+        /*
+         * The plugin ships NO stdlib (kotlin.stdlib.default.dependency=false),
+         * so at runtime it gets whatever the IDE bundles - and the baseline,
+         * 2026.1, bundles 2.3.20 while we compile with 2.4.0. Without this, a
+         * call to a stdlib function new in 2.4 compiles here and fails with
+         * NoSuchMethodError in a 2026.1 IDE. Pinning the API level makes the
+         * compiler refuse it instead. Raise it together with sinceBuild
+         * (table: plugins.jetbrains.com/docs/intellij/using-kotlin.html).
+         */
+        apiVersion = KotlinVersion.KOTLIN_2_3
     }
 }
 

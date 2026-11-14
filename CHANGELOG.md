@@ -13,6 +13,17 @@ version and stamps the date — run it at release time, before tagging.
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-11-14
+
+- **Nothing folds while you type.** Fold regions are reconciled instead of rebuilt on every re-parse: a comment that becomes a block, or a block whose title is being edited, no longer folds away under the caret, and two blocks with the same title keep separate fold states.
+- Fold all, unfold all and follow-caret are IDE actions now (`Tools → Codebook`, Find Action, keymap), so presentation mode can sit on a shortcut. Follow-caret is remembered per project.
+- Output gutter icons match section names as whole words: `init` no longer lands inside `define_and_init`.
+- With follow-caret off, editing a title no longer blanks the notes; the selection holds on to the block rather than to its title, and open lookups survive the edit.
+- A split view of the same file gets fold regions and gutter icons too.
+- "Nothing to fold" and similar messages are notifications instead of modal dialogs.
+- Build: Gradle 9.9.1, IntelliJ Platform Gradle Plugin 2.20.1, Kotlin API level pinned to 2.3 (the stdlib bundled with the 2026.1 baseline).
+- Internal: the parser no longer assembles the text of every PSI node it passes; caches are owned by the project instead of living for the IDE's lifetime.
+
 ## [2.2.1] - 2026-08-21
 
 - AUTHORING.md guideline added

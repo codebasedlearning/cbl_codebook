@@ -2,9 +2,8 @@
 
 package dev.codebasedlearning.cbl
 
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.guessProjectDir
@@ -95,9 +94,12 @@ class CblConfig private constructor(
             }
         }
 
-        // single-threaded use (EDT); keyed by the chain of (path, stamp)
-        // pairs - any edit to any file in the cascade invalidates (on save)
-        private val cache = HashMap<String, CblConfig>()
+        // Cached per project in [CblCaches], single-threaded use (EDT); keyed
+        // by the chain of (path, stamp) pairs - any edit to any file in the
+        // cascade invalidates (on save). Without a project there is nothing to
+        // own a cache, and nothing that asks often enough to need one.
+        private fun cacheOf(project: Project?): HashMap<String, CblConfig>? =
+            project?.takeIf { !it.isDisposed }?.service<CblCaches>()?.configs
 
         fun forSelectedFile(project: Project): CblConfig =
             forFile(project, FileEditorManager.getInstance(project).selectedFiles.firstOrNull())
@@ -129,14 +131,17 @@ class CblConfig private constructor(
             if (chain.isEmpty()) return DEFAULTS
 
             val cacheKey = chain.joinToString("|") { "${it.path}@${it.timeStamp}" }
-            cache[cacheKey]?.let { return it }
+            val cache = cacheOf(project)
+            cache?.get(cacheKey)?.let { return it }
 
             val merged = mergeLayers(
                 chain.map { it to runCatching { VfsUtilCore.loadText(it) }.getOrDefault("") }
             )
             val config = build(project, merged, chain)
-            if (cache.size > 64) cache.clear() // stale stamps accumulate; keep it tiny
-            cache[cacheKey] = config
+            if (cache != null) {
+                if (cache.size > 64) cache.clear() // stale stamps accumulate; keep it tiny
+                cache[cacheKey] = config
+            }
             return config
         }
 
@@ -279,10 +284,6 @@ class CblConfig private constructor(
                     line.substring(0, idx).trim() to line.substring(idx + 1).trim()
                 }
 
-        private fun warn(project: Project?, message: String) {
-            val group = NotificationGroupManager.getInstance()
-                .getNotificationGroup("Codebook") ?: return
-            group.createNotification(message, NotificationType.WARNING).notify(project)
-        }
+        private fun warn(project: Project?, message: String) = CblNotify.warn(project, message)
     }
 }

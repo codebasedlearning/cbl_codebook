@@ -2,6 +2,7 @@
 
 package dev.codebasedlearning.cbl
 
+import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
@@ -159,6 +160,33 @@ class CblModel(val blocks: List<CblBlock>) {
         }
         return null
     }
+
+    /**
+     * One key per block, index-aligned with [blocks]: the slug path from the
+     * outermost ancestor down, plus an ordinal among the blocks that share that
+     * path - `discussion:preview#1` is the second "Preview" under "Discussion".
+     *
+     * This is a block's identity ACROSS re-parses where no document position is
+     * available to hold on to (see the panel's selection): a re-parse hands out
+     * new block objects, offsets shift with every edit above, and a title alone
+     * is not unique - didactic files repeat titles on purpose.
+     */
+    private val keys: List<String> by lazy {
+        val seen = HashMap<String, Int>()
+        blocks.indices.map { i ->
+            val path = (ancestorChain(i) + blocks[i]).joinToString(":") { it.slug }
+            val ordinal = seen.getOrDefault(path, 0)
+            seen[path] = ordinal + 1
+            "$path#$ordinal"
+        }
+    }
+
+    /** The key of [block], or null if it is not one of this model's blocks. */
+    fun keyOf(block: CblBlock): String? = blocks.indexOf(block).takeIf { it >= 0 }?.let { keys[it] }
+
+    /** The block [key] names in THIS model - typically a later parse of the
+     *  file the key was taken from. */
+    fun blockByKey(key: String): CblBlock? = keys.indexOf(key).takeIf { it >= 0 }?.let { blocks[it] }
 
     /** Enclosing blocks of [block], outermost first - the breadcrumb chain.
      *  Empty for depth-1 topics (and unknown blocks). */
@@ -357,9 +385,18 @@ object CblParser {
      * instead of the string would report the wrong range.
      */
     private fun isBlockComment(element: PsiElement): Boolean {
+        /*
+         * The cheap tests come FIRST. `element.text` on a composite assembles
+         * the text of its whole subtree - for the file node that is the entire
+         * file, for a class its entire body - and the visitor asks every node
+         * on the way down. Asking for the text before knowing whether the
+         * element could qualify at all copied the file once per nesting level,
+         * on the EDT, at every pause in typing.
+         */
+        if (element is PsiComment) return element.text.trimStart().startsWith("/*")
+        if (element.firstChild != null || element.textLength < 6) return false
         val t = element.text.trimStart()
-        return if (element is PsiComment) t.startsWith("/*")
-        else element.firstChild == null && (t.startsWith("\"\"\"") || t.startsWith("'''"))
+        return t.startsWith("\"\"\"") || t.startsWith("'''")
     }
 
     /**
@@ -616,23 +653,26 @@ object CblParser {
 
 /**
  * Models of OTHER files (cross-file refs, glossary/dictionary use), cached by
- * modification stamp. Markdown files are parsed by headings from document
+ * modification stamp, per project. Markdown files are parsed by headings from document
  * text; everything else goes through the PSI-comment parser.
  * Call inside a read action.
  */
 object CblForeign {
     private val markdownExtensions = setOf("md", "markdown")
 
-    // keyed by path; the cached CblConfig is compared by identity, so a saved
-    // cbl.properties edit (which yields a fresh instance) invalidates as well
-    private val cache = HashMap<String, Triple<Long, CblConfig, CblModel>>()
+    /** A cached model: valid for one document stamp under one config. The
+     *  config is compared by identity, so a saved cbl.properties edit (which
+     *  yields a fresh instance) invalidates as well. */
+    internal class Entry(val stamp: Long, val config: CblConfig, val model: CblModel)
 
     fun model(project: Project, file: VirtualFile): CblModel? {
         val document = FileDocumentManager.getInstance().getDocument(file)
         val stamp = document?.modificationStamp ?: file.modificationStamp
         val config = CblConfig.forFile(project, file)
-        cache[file.path]?.let { (cachedStamp, cachedConfig, model) ->
-            if (cachedStamp == stamp && cachedConfig === config) return model
+        // keyed by path, held by the project (see [CblCaches])
+        val cache = project.service<CblCaches>().foreign
+        cache[file.path]?.let { entry ->
+            if (entry.stamp == stamp && entry.config === config) return entry.model
         }
         val model = if (file.extension?.lowercase() in markdownExtensions) {
             CblParser.parseMarkdown(document?.text ?: return null)
@@ -640,10 +680,9 @@ object CblForeign {
             PsiManager.getInstance(project).findFile(file)
                 ?.let { CblParser.parse(it, config.levelPatterns) } ?: return null
         }
-        // the cache lives in an object, i.e. for the IDE's lifetime and across
-        // projects - so it must not grow without bound (same guard as CblConfig)
+        // a long session visits many files - keep it tiny (same guard as CblConfig)
         if (cache.size > 64) cache.clear()
-        cache[file.path] = Triple(stamp, config, model)
+        cache[file.path] = Entry(stamp, config, model)
         return model
     }
 }

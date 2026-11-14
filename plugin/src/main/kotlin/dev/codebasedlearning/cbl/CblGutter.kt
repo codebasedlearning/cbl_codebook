@@ -98,12 +98,18 @@ object CblGutter {
      * visible enough to be reported. Python docstrings are strings rather than
      * comments, so a name mentioned in one still wins; PSI has no cheaper answer
      * that stays language-agnostic.
+     *
+     * An occurrence is a WHOLE WORD (see [wholeWordIndexOf]). A plain substring
+     * search found the section `init` inside `define_and_init`, and since one
+     * name yields one icon, the icon sat on the wrong function and the right
+     * one had none. A name that only ever occurs as part of a longer identifier
+     * is "not found" - which the log says, and which is true.
      */
     private fun anchorOffset(text: CharSequence, name: String, file: PsiFile?): Int {
         var from = 0
         var firstAnywhere = -1
         while (true) {
-            val index = text.indexOf(name, from)
+            val index = wholeWordIndexOf(text, name, from)
             if (index < 0) break
             if (firstAnywhere < 0) firstAnywhere = index
             if (file == null || !isInsideComment(file, index)) return index
@@ -123,6 +129,29 @@ object CblGutter {
             .forEach { it.dispose() }
     }
 }
+
+/**
+ * First occurrence of [name] in [text] at or after [from] that is not part of a
+ * longer identifier, or -1. A boundary is only demanded where the name itself
+ * ends in an identifier character: a section called `demo()` may well follow a
+ * letter-free bracket, and one called `using print` has a blank in the middle
+ * that is nobody's business. Top-level and pure, so it is tested without an IDE.
+ */
+internal fun wholeWordIndexOf(text: CharSequence, name: String, from: Int = 0): Int {
+    if (name.isEmpty()) return -1
+    var start = from
+    while (true) {
+        val index = text.indexOf(name, start)
+        if (index < 0) return -1
+        val end = index + name.length
+        val leftFree = !isWordChar(name.first()) || index == 0 || !isWordChar(text[index - 1])
+        val rightFree = !isWordChar(name.last()) || end == text.length || !isWordChar(text[end])
+        if (leftFree && rightFree) return index
+        start = index + 1
+    }
+}
+
+private fun isWordChar(c: Char): Boolean = c == '_' || c.isLetterOrDigit()
 
 /** Console-section icon: clicking scrolls the Run console to that section. */
 class CblGutterIcon(private val project: Project, private val name: String) : GutterIconRenderer() {

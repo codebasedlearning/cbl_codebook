@@ -3,13 +3,12 @@
 package dev.codebasedlearning.cbl
 
 import com.intellij.execution.impl.ConsoleViewImpl
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.ide.DataManager
 import com.intellij.openapi.actionSystem.LangDataKeys
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
@@ -96,17 +95,15 @@ object CblConsole {
 
     // The console text is re-read on every gutter refresh and every caret move
     // (the panel shows a section's output), so parse it once per document state.
-    // Keyed by the DOCUMENT as well, not just its stamp: this cache is
-    // object-level, so it outlives projects and consoles, and a fresh console
-    // must never be answered with the previous one's sections.
-    private class Cached(
+    // Keyed by the DOCUMENT as well, not just its stamp: the cache outlives
+    // consoles, and a fresh console must never be answered with the previous
+    // one's sections. Held per project, in [CblCaches].
+    internal class Cached(
         val document: WeakReference<Document>,
         val stamp: Long,
         val config: CblConfig,
         val model: CblOutputModel,
     )
-
-    private var cached: Cached? = null
 
     /**
      * How much text the console holds right now, or null when there is none to
@@ -123,11 +120,12 @@ object CblConsole {
         if (document.textLength == 0) return null
         val stamp = document.modificationStamp
         val config = CblConfig.forSelectedFile(project)
-        cached?.let {
+        val caches = project.service<CblCaches>()
+        caches.console?.let {
             if (it.document.get() === document && it.stamp == stamp && it.config === config) return it.model
         }
         val model = CblOutputModel(document.text, config.sectionRegex)
-        cached = Cached(WeakReference(document), stamp, config, model)
+        caches.console = Cached(WeakReference(document), stamp, config, model)
         return model
     }
 
@@ -177,8 +175,5 @@ object CblConsole {
 
     internal fun log(message: String) = LOG.info("Codebook: $message")
 
-    private fun warn(project: Project, message: String) {
-        NotificationGroupManager.getInstance().getNotificationGroup("Codebook")
-            ?.createNotification(message, NotificationType.WARNING)?.notify(project)
-    }
+    private fun warn(project: Project, message: String) = CblNotify.warn(project, message)
 }

@@ -2,8 +2,10 @@
 
 package dev.codebasedlearning.cbl
 
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.FoldRegion
 import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
 /**
@@ -14,6 +16,22 @@ class CblFoldingTest : BasePlatformTestCase() {
 
     private fun cblRegions() = myFixture.editor.foldingModel.allFoldRegions
         .filter { it.placeholderText == CblFolding.PLACEHOLDER }
+        .sortedBy { it.startOffset }
+
+    /** Replace the first [old] in the document by [new], as typing would, and
+     *  commit - the state a debounced re-parse finds. */
+    private fun edit(old: String, new: String) {
+        val document = myFixture.editor.document
+        val at = document.text.indexOf(old)
+        assertTrue("'$old' must be in the document", at >= 0)
+        WriteCommandAction.runWriteCommandAction(project, Runnable {
+            document.replaceString(at, at + old.length, new)
+        })
+        PsiDocumentManager.getInstance(project).commitDocument(document)
+    }
+
+    private fun setExpanded(region: FoldRegion, expanded: Boolean) =
+        myFixture.editor.foldingModel.runBatchFoldingOperation { region.isExpanded = expanded }
 
     fun testBodyOnlyFoldsAtEveryLevelAndFoldAllRoundTrips() {
         myFixture.configureByText(
@@ -144,7 +162,7 @@ class CblFoldingTest : BasePlatformTestCase() {
         CblFolding.apply(editor, model)
         assertTrue(CblFolding.setAll(editor, model, expanded = true))
         // a re-parse (debounced document change) must not re-collapse it:
-        // expansion state is keyed by title, not by offsets
+        // a region that still covers its block's body is kept as it is
         CblFolding.apply(editor, CblParser.parse(myFixture.file))
         assertTrue("state must survive a reapply", cblRegions().all { it.isExpanded })
 
@@ -161,5 +179,106 @@ class CblFoldingTest : BasePlatformTestCase() {
         myFixture.editor.caretModel.moveToOffset(freshModel.blocks[0].foldStart + 1)
         CblFolding.apply(myFixture.editor, freshModel)
         assertTrue("the block under the caret stays expanded", cblRegions().all { it.isExpanded })
+    }
+
+    /**
+     * The reported case: an ordinary comment BECOMES a block while the author is
+     * writing its frame line. The caret is on that line - not in the body - and
+     * the title is one nobody has seen before. Until v2.2.1 that combination
+     * meant "unknown, and not being edited", and the body folded away mid-word.
+     */
+    fun testACommentThatBecomesABlockStaysOpen() {
+        myFixture.configureByText(
+            "Demo.java",
+            """
+            // header line
+            /* plain comment
+               more text */
+            class A {}
+            /* ---- Topic ----
+               body */
+            class B {}
+            """.trimIndent()
+        )
+        val editor = myFixture.editor
+        editor.caretModel.moveToOffset(0)
+        CblFolding.apply(editor, CblParser.parse(myFixture.file))
+        assertEquals(1, cblRegions().size)
+        assertFalse("opening a file starts folded", cblRegions()[0].isExpanded)
+
+        edit("plain comment", "---- Fresh ----")
+        editor.caretModel.moveToOffset(editor.document.text.indexOf("Fresh") + 2)
+        val model = CblParser.parse(myFixture.file)
+        assertEquals(2, model.blocks.size)
+        CblFolding.apply(editor, model)
+
+        val regions = cblRegions()
+        assertEquals(2, regions.size)
+        assertTrue("a block that appears while typing starts open", regions[0].isExpanded)
+        assertFalse("and the untouched block below keeps its state", regions[1].isExpanded)
+
+        // the caret moving on within the debounce changes nothing either
+        edit("Fresh", "Fresher")
+        editor.caretModel.moveToOffset(0)
+        CblFolding.apply(editor, CblParser.parse(myFixture.file))
+        assertTrue("still open after the caret has left", cblRegions()[0].isExpanded)
+    }
+
+    /** Rewording a title is an edit like any other: it must neither fold an
+     *  open block nor open a folded one. State used to be keyed by title, so
+     *  every new wording was a block without a past. */
+    fun testRetitlingKeepsTheFoldState() {
+        myFixture.configureByText(
+            "Demo.java",
+            """
+            // header line
+            /* ---- Topic ----
+               body */
+            class A {}
+            /* ---- Other ----
+               body */
+            class B {}
+            """.trimIndent()
+        )
+        val editor = myFixture.editor
+        editor.caretModel.moveToOffset(0)
+        CblFolding.apply(editor, CblParser.parse(myFixture.file))
+        setExpanded(cblRegions()[0], true)
+
+        edit("Topic", "Renamed topic")
+        editor.caretModel.moveToOffset(editor.document.text.indexOf("Renamed") + 3)
+        CblFolding.apply(editor, CblParser.parse(myFixture.file))
+        assertTrue("the open block stays open under a new title", cblRegions()[0].isExpanded)
+
+        edit("Other", "Another")
+        CblFolding.apply(editor, CblParser.parse(myFixture.file))
+        assertFalse("the folded block stays folded under a new title", cblRegions()[1].isExpanded)
+        assertEquals(2, cblRegions().size)
+    }
+
+    /** Didactic files repeat titles on purpose (`-- .Preview --`). Each block
+     *  has its own fold state - keyed by title, the last one decided for all. */
+    fun testBlocksWithTheSameTitleFoldIndependently() {
+        myFixture.configureByText(
+            "Demo.java",
+            """
+            // header line
+            /* -- Preview --
+               one */
+            class A {}
+            /* -- Preview --
+               two */
+            class B {}
+            """.trimIndent()
+        )
+        val editor = myFixture.editor
+        editor.caretModel.moveToOffset(0)
+        CblFolding.apply(editor, CblParser.parse(myFixture.file))
+        assertEquals(2, cblRegions().size)
+        setExpanded(cblRegions()[0], true)
+
+        CblFolding.apply(editor, CblParser.parse(myFixture.file))
+        assertTrue(cblRegions()[0].isExpanded)
+        assertFalse(cblRegions()[1].isExpanded)
     }
 }

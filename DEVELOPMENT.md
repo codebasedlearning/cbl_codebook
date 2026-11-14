@@ -14,7 +14,8 @@ see [README.md](README.md).
 - Nothing else. Everything runs through the committed wrapper, which downloads
   the IntelliJ Platform SDK on first use (~1 GB, cached in `~/.gradle`).
 
-Toolchain: Gradle 9.6.1 · IntelliJ Platform Gradle Plugin 2.18.1 · Kotlin 2.4.0
+Toolchain: Gradle 9.9.1 · IntelliJ Platform Gradle Plugin 2.20.1 · Kotlin 2.4.0
+(API level pinned to 2.3, the stdlib the baseline IDE bundles)
 · baseline IntelliJ IDEA 2026.1.4, `sinceBuild = 261`, no upper bound.
 
 The build-time versions can be bumped freely. The **baseline** is the deliberate
@@ -39,13 +40,13 @@ cbl_codebook/
 ├── sample-cpp/                  ← open in CLion   (CMake)
 │   ├── snippets/                   one file, one topic, one executable
 │   │   └── utils/                  header-only helpers
-│   ├── doc/                        glossary.md, answers.md, images
+│   ├── docs/                       glossary.md, answers.md, images
 │   └── cbl.properties              the fully documented reference
 ├── sample-python/               ← open in PyCharm (uv project)
-│   ├── snippets/  snippets/utils/  doc/
+│   ├── snippets/  snippets/utils/  docs/
 │   └── cbl.properties
 └── sample-kotlin/               ← open in IDEA    (own Gradle build)
-    ├── snippets/  snippets/utils/  doc/
+    ├── snippets/  snippets/utils/  docs/
     ├── settings.gradle.kts  build.gradle.kts
     └── cbl.properties
 ```
@@ -130,20 +131,21 @@ installed instead of letting uv fetch the pinned interpreter.
 ./gradlew :plugin:test
 ```
 
-No IDE window opens. 48 tests in two tiers, and the split is the point:
+No IDE window opens. 56 tests in two tiers, and the split is the point:
 
 | Suite | Kind | Subject |
 |---|---|---|
 | `CblRefsTest` (23) | plain JUnit | the three ref forms, labels, short forms, Markdown → HTML |
 | `CblConfigTest` (6) | plain JUnit | the `cbl.properties` cascade, its search bound, pattern validation |
 | `CblOutputModelTest` (2) | plain JUnit | output sections, line offsets |
+| `CblIdentityTest` (5) | plain JUnit | block keys across re-parses, whole-word matching of section names |
 | `CblParserTest` (13) | fixture | the DSL against real PSI comment tokens |
-| `CblFoldingTest` (4) | fixture | body-only folding in a real editor |
+| `CblFoldingTest` (7) | fixture | body-only folding in a real editor, and that typing never folds |
 
 **Tested:** string-to-string logic where a regression is invisible to the eye —
 a regex that starts eating prose, a ref form that swallows the blank line after
 its block, a cascade that stops inheriting per key. These need no IDE, so they
-cost milliseconds, and 31 of the 48 are of this kind.
+cost milliseconds, and 36 of the 56 are of this kind.
 
 **Deliberately not tested:** anything a glance in the sandbox settles faster
 than an assertion — panel layout, colours, icons, gutter placement. That is what
@@ -160,8 +162,8 @@ a hint that some logic wants to be separated from its I/O, the way
 
 Fixture tests use `myFixture.configureByText` throughout. `addFileToProject`
 writes through the real VFS, and on 2026.1 that trips a platform bug in an
-unrelated bundled plugin — read the long comment in `plugin/build.gradle.kts`
-before reaching for it.
+unrelated bundled plugin — so stay with `configureByText` unless a test is
+about the VFS itself.
 
 ## Build and verify
 
@@ -222,7 +224,7 @@ IDE run configuration the multi-line PEM values must be base64-encoded on a
 single line; the task detects and decodes that.
 
 `verifyPluginSignature` needs one workaround, configured in
-`plugin/build.gradle.kts`: on IPGP 2.18.1 the task appends the certificate text
+`plugin/build.gradle.kts`: on IPGP 2.18.1 (not re-tested on 2.20.1) the task appends the certificate text
 as a stray CLI argument when it is given the chain as *content*, and the signer
 answers with exit code **64** — a usage error, not a bad signature. The task is
 therefore pointed at `chain.crt` as a file. If it ever fails with 64 again,

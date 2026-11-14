@@ -36,4 +36,29 @@
         <postStartupActivity implementation="dev.codebasedlearning.cbl.CblStartup"/>
         <notificationGroup id="Codebook" displayType="BALLOON"/>
     </extensions>
+
+    <!-- The panel's commands as real actions: in Find Action, in the keymap
+         (Settings > Keymap > Plugins > Codebook), and under Tools > Codebook.
+         The tool window's toolbar shows these same three. No default shortcuts
+         on purpose - every free chord is somebody's habit in one of the IDEs. -->
+    <actions>
+        <group id="Codebook.Actions" text="Codebook" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="Codebook.FollowCaret"
+                    class="dev.codebasedlearning.cbl.CblFollowCaretAction"
+                    text="Follow Caret"
+                    description="Selected topic tracks the CBL comment above the caret; off = the panel stays put while working in the code"
+                    icon="AllIcons.General.AutoscrollFromSource"/>
+            <action id="Codebook.UnfoldAll"
+                    class="dev.codebasedlearning.cbl.CblUnfoldAllAction"
+                    text="Unfold All CBL Comments"
+                    description="Expand the note body of every CBL comment in the current file"
+                    icon="AllIcons.Actions.Expandall"/>
+            <action id="Codebook.FoldAll"
+                    class="dev.codebasedlearning.cbl.CblFoldAllAction"
+                    text="Fold All CBL Comments"
+                    description="Collapse the note body of every CBL comment in the current file"
+                    icon="AllIcons.Actions.Collapseall"/>
+        </group>
+    </actions>
 </idea-plugin>

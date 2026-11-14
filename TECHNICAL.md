@@ -254,7 +254,9 @@ question.
 Docked right, one tab, three parts:
 
 - **Header** — file name, Run and Debug (derived from the current file's
-  context), a follow-caret toggle, and unfold-all / fold-all.
+  context), a follow-caret toggle, and unfold-all / fold-all. The last three
+  are ordinary IDE actions as well: `Tools → Codebook`, Find Action, and
+  `Settings → Keymap → Plugins → Codebook` for a shortcut.
 - **Outline** — every block in file order, showing its level three ways at once:
   bullet (`•`/`◦`/`·`), indent, and emphasis (**bold**, *italic*, plain below).
   With follow-caret on, a single click jumps to the block; with it off, a single
@@ -265,7 +267,8 @@ Docked right, one tab, three parts:
   discussion.
 
 Follow-caret (on by default) makes selection and notes track the block above the
-caret; switch it off to keep the panel put while working in the code.
+caret; switch it off to keep the panel put while working in the code. The
+setting is remembered per project.
 
 ## Editor folding
 
@@ -280,8 +283,14 @@ class Temperature {
 
 Fold-all and unfold-all act on CBL comments **only** (author mode vs.
 presentation mode), which is the one thing the IDE's native Expand/Collapse All
-cannot express. Fold state survives re-parsing, and a block you are currently
-editing stays open — IntelliJ always expands the region containing the caret.
+cannot express. Both are registered actions (*Fold All CBL Comments*, *Unfold
+All CBL Comments*), so they can be bound to a shortcut in the keymap.
+
+**Nothing folds as a consequence of typing.** Fold state belongs to the block,
+not to its title: it survives re-parsing, rewording the title, and a second
+block with the same title. A block that comes into existence while you write —
+an ordinary comment that gets its frame — starts open. Only opening a file
+starts folded, which is the presentation default.
 
 Single-line comments get no region; there is nothing to hide.
 
@@ -295,8 +304,9 @@ using_print
 ===========
 ```
 
-If a section name also occurs in the source file, its first occurrence gets a
-gutter icon; clicking it opens the Run window, scrolls to that section and
+If a section name also occurs in the source file — as a whole word, so `init`
+does not match inside `define_and_init` — its first occurrence outside a comment
+gets a gutter icon; clicking it opens the Run window, scrolls to that section and
 highlights the header line.
 
 There is **no output verification**. Output is illustration, never judge.
@@ -326,7 +336,7 @@ block.level1.regex = ^={4}(?!=)\s*(?<title>\S.*?)\s*(?<!=)={4}(?!=)\s*(?<rest>.*
 block.level2.regex = ^={3}(?!=)\s*(?<title>\S.*?)\s*(?<!=)={3}(?!=)\s*(?<rest>.*)$
 
 # a glossary plus an answer file
-glossary.path = ./doc/glossary.md, ./doc/answers.md
+glossary.path = ./docs/glossary.md, ./docs/answers.md
 ```
 
 An invalid pattern — uncompilable, or missing its capture group — produces a

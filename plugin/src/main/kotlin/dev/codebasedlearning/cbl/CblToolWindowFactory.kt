@@ -6,13 +6,20 @@ import com.intellij.execution.Executor
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
+import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.RangeMarker
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Computable
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VfsUtilCore
@@ -27,17 +34,14 @@ import com.intellij.ui.content.ContentFactory
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Component
-import java.awt.FlowLayout
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import javax.swing.AbstractButton
-import javax.swing.JButton
+import java.lang.ref.WeakReference
 import javax.swing.JEditorPane
 import javax.swing.JList
 import javax.swing.JPanel
-import javax.swing.JToggleButton
 import javax.swing.ListCellRenderer
 import javax.swing.SwingUtilities
 import javax.swing.text.html.HTMLDocument
@@ -85,17 +89,14 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private val service = project.service<CblService>()
 
+    /** Follow-caret lives here, not in a button: it is persisted, and the
+     *  toolbar toggle and the keymap action are two views of the same value. */
+    private val settings = project.service<CblSettings>()
+
     private val titleLabel = JBLabel()
     private val tocModel = CollectionListModel<CblBlock>()
     private val tocList = JBList(tocModel)
     private val notesPane = htmlPane()
-    // AutoscrollFromSource = the platform's own "selection follows editor"
-    // icon (Structure/Project view) - familiar semantics for free
-    private val followToggle = selectableToggle(
-        AllIcons.General.AutoscrollFromSource,
-        "Follow caret: selected topic tracks the CBL comment above the caret; " +
-            "off = selection stays put while working in the code"
-    )
     private val upperPanel: JPanel
     private val splitter: JBSplitter
     private var syncingSelection = false
@@ -115,33 +116,39 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
     private var currentDetail: CblBlock? = null
 
     /**
-     * Title of the block the panel currently shows - the selection's identity
-     * across re-parses and across refreshes that momentarily leave the list
-     * empty. Kept in the panel rather than read back from [tocList], because
-     * the list is exactly what those refreshes clear (see [updateModel]).
-     * Titles, not offsets: offsets shift on every edit above a block, and the
-     * fold state keys on titles for the same reason.
+     * The block the panel currently shows - the selection's identity across
+     * re-parses and across refreshes that momentarily leave the list empty.
+     * Kept in the panel rather than read back from [tocList], because the list
+     * is exactly what those refreshes clear (see [updateModel]).
+     *
+     * Three parts, strongest first:
+     *  - [selectedMarker], a range marker on the block's comment. It moves with
+     *    every edit, so it survives what nothing else does: a title being
+     *    REWRITTEN, and a second block with the very same title;
+     *  - [selectedKey], the block's [CblModel.keyOf] - for when the marker is
+     *    gone (the document was reloaded from disk);
+     *  - [selectedDocument], because both only mean something in the file they
+     *    were taken from.
+     *
+     * Until v2.2.1 this was the block's title. Titles are not unique, and they
+     * change while being typed: with follow-caret off, editing a title blanked
+     * the notes of the very block under the author's hands.
      */
-    private var selectedTitle: String? = null
+    private var selectedMarker: RangeMarker? = null
+    private var selectedKey: String? = null
+    private var selectedDocument = WeakReference<Document>(null)
 
     init {
-        val buttons = JPanel(FlowLayout(FlowLayout.RIGHT, 2, 0)).apply {
-            add(compact(iconButton(AllIcons.Actions.Execute, "Run current file") {
-                runSelectedConfiguration(DefaultRunExecutor.getRunExecutorInstance())
-            }))
-            add(compact(iconButton(AllIcons.Actions.StartDebugger, "Debug current file") {
-                runSelectedConfiguration(DefaultDebugExecutor.getDebugExecutorInstance())
-            }))
-            add(compact(followToggle))
-            // folds/unfolds ONLY the CBL comments - a targeted subset the IDE's
-            // native Expand/Collapse All (which flattens everything) cannot express
-            add(compact(iconButton(AllIcons.Actions.Expandall, "Unfold all CBL comments") { setFolds(expand = true) }))
-            add(compact(iconButton(AllIcons.Actions.Collapseall, "Fold all CBL comments") { setFolds(expand = false) }))
-        }
+        // a platform toolbar over real actions (see CblActions.kt): the LaF
+        // paints hover and the toggle's selected state, and follow-caret and
+        // the two fold commands are the SAME actions the keymap knows
+        val toolbar = ActionManager.getInstance()
+            .createActionToolbar("CodebookToolbar", toolbarActions(), true)
+        toolbar.setTargetComponent(this)
         val header = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(4, 8)
             add(titleLabel, BorderLayout.CENTER)
-            add(buttons, BorderLayout.EAST)
+            add(toolbar.component, BorderLayout.EAST)
         }
         upperPanel = JPanel(BorderLayout()).apply {
             add(header, BorderLayout.NORTH)
@@ -180,7 +187,7 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
                 // follow-caret on: click jumps (panel and caret are coupled
                 // anyway). Off: single click only selects here in the panel,
                 // the editor stays where it is; double click jumps explicitly.
-                if (followToggle.isSelected || e.clickCount >= 2) navigateTo(block)
+                if (settings.followCaret || e.clickCount >= 2) navigateTo(block)
                 // render notes directly - with follow-caret off, the caret
                 // listener won't do it for us
                 showBlock(block)
@@ -195,18 +202,79 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
 
         service.addModelListener { updateModel() }
+        // switching follow back on syncs to the caret through this listener
+        // as well - see CblFollowCaretAction and CblService.syncCaret
         service.addCaretListener { offset ->
-            if (followToggle.isSelected) updateCaret(offset)
-        }
-        followToggle.isSelected = true // follow-caret is the default
-        followToggle.addActionListener {
-            // switching follow back on: sync to the current caret immediately
-            if (followToggle.isSelected) {
-                FileEditorManager.getInstance(project).selectedTextEditor
-                    ?.caretModel?.offset?.let { updateCaret(it) }
-            }
+            if (settings.followCaret) updateCaret(offset)
         }
         updateModel()
+    }
+
+    /**
+     * Run and Debug stay local to the panel - the IDE has its own, and ours
+     * only add "derive the configuration from this file". Follow-caret and the
+     * fold pair are the registered actions, looked up by id.
+     */
+    private fun toolbarActions(): DefaultActionGroup {
+        val manager = ActionManager.getInstance()
+        return DefaultActionGroup().apply {
+            add(runAction("Run Current File", AllIcons.Actions.Execute) {
+                DefaultRunExecutor.getRunExecutorInstance()
+            })
+            add(runAction("Debug Current File", AllIcons.Actions.StartDebugger) {
+                DefaultDebugExecutor.getDebugExecutorInstance()
+            })
+            addSeparator()
+            // AutoscrollFromSource = the platform's own "selection follows
+            // editor" icon (Structure/Project view) - familiar semantics for free
+            manager.getAction(CblActionIds.FOLLOW_CARET)?.let { add(it) }
+            // fold/unfold ONLY the CBL comments - a targeted subset the IDE's
+            // native Expand/Collapse All (which flattens everything) cannot express
+            manager.getAction(CblActionIds.UNFOLD_ALL)?.let { add(it) }
+            manager.getAction(CblActionIds.FOLD_ALL)?.let { add(it) }
+        }
+    }
+
+    private fun runAction(text: String, icon: javax.swing.Icon, executor: () -> Executor): AnAction =
+        object : DumbAwareAction(text, null, icon) {
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+            override fun actionPerformed(e: AnActionEvent) = runSelectedConfiguration(executor())
+        }
+
+    /** Hold on to [block] as the selection - see [selectedMarker]. */
+    private fun remember(block: CblBlock) {
+        forget()
+        val model = service.model ?: return
+        val document = service.modelDocument ?: return
+        selectedKey = model.keyOf(block) ?: return
+        selectedDocument = WeakReference(document)
+        // a stale model's offsets describe a document that no longer exists -
+        // a marker placed by them would hold on to the wrong text; the key
+        // carries the selection until the re-parse comes round
+        val start = block.headerRange.startOffset
+        if (!service.isStale() && start + 1 <= document.textLength) {
+            selectedMarker = document.createRangeMarker(start, start + 1)
+        }
+    }
+
+    private fun forget() {
+        selectedMarker?.dispose()
+        selectedMarker = null
+        selectedKey = null
+        selectedDocument = WeakReference<Document>(null)
+    }
+
+    /** The remembered block in a fresh [model], or null - in particular when
+     *  the model belongs to another file than the selection does. */
+    private fun recall(model: CblModel): CblBlock? {
+        val document = service.modelDocument ?: return null
+        if (selectedDocument.get() !== document) return null
+        val marker = selectedMarker
+        if (marker != null && marker.isValid) {
+            model.blocks.firstOrNull { it.headerRange.startOffset == marker.startOffset }
+                ?.let { return it }
+        }
+        return selectedKey?.let { model.blockByKey(it) }
     }
 
     private fun updateModel() {
@@ -220,17 +288,20 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
             tocModel.replaceAll(model?.listedBlocks ?: emptyList())
             // a re-parse must not wipe the selection - essential with
             // follow-caret off, where it is the only state there is. The
-            // remembered title, NOT the list's own selection, is what restores
+            // remembered block, NOT the list's own selection, is what restores
             // it: a refresh that finds no editor (a run console holding the
             // focus, a switch to a non-code tab) empties the list first, and
             // reading the selection back out of it would then find nothing.
             // Matched against ALL blocks, so an unlisted one keeps its notes on
             // screen - it just has no row to highlight.
-            val restored = model?.blocks?.firstOrNull { it.title == selectedTitle }
+            val restored = model?.let { recall(it) }
             if (restored != null) {
                 if (restored.isUnlisted) tocList.clearSelection()
                 else tocList.setSelectedValue(restored, true)
-                showBlock(restored)
+                // the same block as before, in a new parse: what was looked up
+                // stays open, and the pane does not jump back to the top at
+                // every pause in typing
+                showBlock(restored, preserveScroll = true, sameBlock = true)
             } else {
                 // no match: say so explicitly. Leaving it to the list means
                 // leaving it to Swing, and an arbitrary row (the first) then
@@ -264,10 +335,10 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
                 else tocList.setSelectedValue(block, true)
                 showBlock(block)
             } else {
-                // the caret left every block - drop the remembered title too,
+                // the caret left every block - drop the remembered block too,
                 // or the next refresh would resurrect a selection the reader
                 // has moved away from
-                selectedTitle = null
+                forget()
                 tocList.clearSelection()
                 notesPane.text = ""
             }
@@ -284,13 +355,18 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
      * breadcrumb chain. Caret in the topic itself (or a depth-1 [detail])
      * renders the topic section only.
      */
-    private fun showBlock(detail: CblBlock, preserveScroll: Boolean = false) {
+    private fun showBlock(detail: CblBlock, preserveScroll: Boolean = false, sameBlock: Boolean = false) {
         // a lookup belongs to the block it was looked up from: moving on closes
-        // it. Compared by title, not by identity - a re-parse hands out new
-        // block objects for the same file, and typing must close nothing.
-        if (detail.title != currentDetail?.title) openSlots.clear()
+        // it. Within one parse a block is its object; ACROSS parses - new
+        // objects for the same file - the caller says so ([sameBlock], from the
+        // restore in [updateModel]), so typing closes nothing. Not by title:
+        // two blocks may share one, and a title under edit is a new one.
+        val known = detail === currentDetail
+        if (!sameBlock && !known) openSlots.clear()
         currentDetail = detail
-        selectedTitle = detail.title
+        // not on every caret move inside one block - only when there is
+        // something new to hold on to
+        if (!known || selectedKey == null) remember(detail)
         val chain = service.model?.chainOf(detail) ?: emptyList()
         // ALL layers of the chain contribute, topic -> ... -> detail
         val layers = (chain + detail).distinct()
@@ -387,43 +463,6 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
         currentDetail?.let { showBlock(it, preserveScroll = true) }
     }
 
-    private fun iconButton(icon: javax.swing.Icon, tip: String, action: () -> Unit) =
-        JButton(icon).apply {
-            toolTipText = tip
-            addActionListener { action() }
-        }
-
-    /** Icon-only, tight-fitting button styling. */
-    private fun compact(button: AbstractButton): AbstractButton = button.apply {
-        margin = JBUI.emptyInsets()
-        isFocusable = false
-        preferredSize = JBUI.size(26, 26)
-    }
-
-    /**
-     * Icon-only toggle with an explicit selected state (tint + accent border) -
-     * the IDE LaF paints almost none for icon-only JToggleButtons.
-     */
-    private fun selectableToggle(icon: javax.swing.Icon, tip: String): JToggleButton =
-        JToggleButton(icon).apply {
-            toolTipText = tip
-            val defaultBorder = border
-            addItemListener {
-                if (isSelected) {
-                    isOpaque = true
-                    background = com.intellij.ui.JBColor(java.awt.Color(213, 227, 250), java.awt.Color(47, 69, 98))
-                    border = javax.swing.BorderFactory.createLineBorder(
-                        com.intellij.ui.JBColor(java.awt.Color(53, 116, 240), java.awt.Color(76, 115, 180)), 1, true
-                    )
-                } else {
-                    isOpaque = false
-                    background = null
-                    border = defaultBorder
-                }
-                repaint()
-            }
-        }
-
     /**
      * Level emphasis in the TOC, on top of bullet and indent: **bold** topics,
      * *italic* children, plain from level 3 down - three visual weights are
@@ -484,45 +523,6 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
     }
 
-    private fun setFolds(expand: Boolean) {
-        val editor = FileEditorManager.getInstance(project).selectedTextEditor
-        if (editor == null) {
-            Messages.showInfoMessage(project, "No editor selected.", "CBL")
-            return
-        }
-        val model = service.model
-        if (CblFolding.setAll(editor, model, expand)) return
-
-        val blocks = model?.blocks ?: emptyList()
-        val foldable = blocks.count { it.isFoldable }
-        if (foldable > 0 && model != null) {
-            val created = CblFolding.apply(editor, model)
-            if (CblFolding.setAll(editor, model, expand)) return
-            Messages.showInfoMessage(
-                project,
-                "$foldable foldable block(s) in the model, but the editor accepted " +
-                    "$created fold region(s) and reports " +
-                    "${CblFolding.regionCount(editor, model)} of ours.\n" +
-                    "The folding model refused the ranges - please report this " +
-                    "together with the file.",
-                "CBL"
-            )
-            return
-        }
-        Messages.showInfoMessage(
-            project,
-            if (blocks.isNotEmpty())
-                "All ${blocks.size} CBL block(s) in this file are single-line comments -\n" +
-                    "there is no note body to fold away."
-            else
-                "Parser sees 0 blocks in the current file.\n" +
-                    "If the file clearly contains CBL comments, the language's " +
-                    "PSI probably provides no comment tokens here (CLion Nova?) - " +
-                    "try Settings > Advanced Settings > classic C/C++ language engine.",
-            "CBL"
-        )
-    }
-
     private fun navigateTo(block: CblBlock) {
         val editor = FileEditorManager.getInstance(project).selectedTextEditor ?: return
         if (block.startOffset > editor.document.textLength) return
@@ -552,8 +552,9 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
      * Model of a REFERENCED file, under a read action - `CblForeign` walks the
      * PSI for code files. `Application.runReadAction` deliberately: the Kotlin
      * `runReadAction` extension and `ReadAction.compute` are both deprecated
-     * from 2026.1, and their replacement `computeBlocking` does not exist on the
-     * 242 baseline - this is what it delegates to.
+     * from 2026.1. Their replacement `computeBlocking` was out of reach while
+     * the baseline was 242; at `sinceBuild = 261` it no longer is, but this is
+     * what it delegates to, and it needs no opt-in.
      */
     private fun foreignModel(file: com.intellij.openapi.vfs.VirtualFile): CblModel? =
         ApplicationManager.getApplication().runReadAction(
@@ -647,7 +648,7 @@ class CblPanel(private val project: Project) : JPanel(BorderLayout()) {
             if (block != null) {
                 tocList.setSelectedValue(block, true)
                 showBlock(block)
-                if (followToggle.isSelected) navigateTo(block)
+                if (settings.followCaret) navigateTo(block)
                 return
             }
             // not in this file: the same glossary-path fallback the renderer
